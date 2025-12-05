@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Toolkit - Processing Queue</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <a href="/" class="logo">💰 Expense Toolkit</a>
+                <nav class="nav">
+                    <a href="/" class="nav-link">Expenses</a>
+                    <a href="/queue" class="nav-link active">
+                        Queue
+                        <span class="queue-badge" id="queueCount">0</span>
+                    </a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <section class="queue-container">
+            <div class="queue-header">
+                <h1>Processing Queue</h1>
+                <p id="queueStatus">Loading...</p>
+            </div>
+
+            <div id="queueContent">
+                <!-- Content will be loaded here -->
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/js/queue.js"></script>
+</body>
+</html>

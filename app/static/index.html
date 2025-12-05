@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Toolkit - Expenses</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <a href="/" class="logo">💰 Expense Toolkit</a>
+                <nav class="nav">
+                    <a href="/" class="nav-link active">Expenses</a>
+                    <a href="/queue" class="nav-link">
+                        Queue
+                        <span class="queue-badge" id="queueCount">0</span>
+                    </a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Filters -->
+        <section class="filters">
+            <div class="filters-row">
+                <div class="filter-group">
+                    <label for="categoryFilter">Category</label>
+                    <select id="categoryFilter">
+                        <option value="">All Categories</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="tagsFilter">Tags</label>
+                    <select id="tagsFilter">
+                        <option value="">All Tags</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="accountFilter">Account</label>
+                    <select id="accountFilter">
+                        <option value="">All Accounts</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="dateRange">Date Range</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="date" id="dateFrom" style="flex: 1;">
+                        <input type="date" id="dateTo" style="flex: 1;">
+                    </div>
+                </div>
+            </div>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="🔍 Search merchant or description...">
+            </div>
+        </section>
+
+        <!-- Expenses -->
+        <section class="expenses-container">
+            <div class="expenses-header">
+                <h2>Expenses</h2>
+                <div class="total-amount" id="totalAmount">Total: £0.00</div>
+            </div>
+            
+            <div id="expensesContent">
+                <div style="text-align: center; padding: 2rem; color: #6c757d;">
+                    Loading expenses...
+                </div>
+            </div>
+
+            <div class="pagination" id="pagination">
+                <button class="btn btn-secondary" id="prevBtn" disabled>← Previous</button>
+                <span id="pageInfo">Page 1 of 1</span>
+                <button class="btn btn-secondary" id="nextBtn" disabled>Next →</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/js/expenses.js"></script>
+</body>
+</html>
