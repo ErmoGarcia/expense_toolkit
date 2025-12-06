@@ -26,6 +26,46 @@
 
     <!-- Main Content -->
     <main class="container">
+        <!-- Filters -->
+        <section class="filters queue-filters">
+            <div class="filters-row">
+                <div class="filter-group">
+                    <label for="queueDateFrom">Date From</label>
+                    <input type="date" id="queueDateFrom">
+                </div>
+                <div class="filter-group">
+                    <label for="queueDateTo">Date To</label>
+                    <input type="date" id="queueDateTo">
+                </div>
+                <div class="filter-group">
+                    <label for="queueAmountMin">Amount Min (£)</label>
+                    <input type="number" id="queueAmountMin" step="0.01" placeholder="e.g., -100">
+                </div>
+                <div class="filter-group">
+                    <label for="queueAmountMax">Amount Max (£)</label>
+                    <input type="number" id="queueAmountMax" step="0.01" placeholder="e.g., 0">
+                </div>
+            </div>
+            <div class="filters-row" style="margin-top: 1rem;">
+                <div class="filter-group">
+                    <label for="queueSourceFilter">Source</label>
+                    <select id="queueSourceFilter">
+                        <option value="">All Sources</option>
+                    </select>
+                </div>
+                <div class="filter-group" style="grid-column: span 2;">
+                    <label for="queueSearchInput">Search Merchant/Description</label>
+                    <input type="text" id="queueSearchInput" placeholder="Search...">
+                </div>
+                <div class="filter-group">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1.8rem;">
+                        <input type="checkbox" id="showDuplicatesOnly" style="width: auto;">
+                        <span>Show Duplicates Only</span>
+                    </label>
+                </div>
+            </div>
+        </section>
+
         <section class="queue-container">
              <div class="queue-header">
                  <h1>Processing Queue</h1>

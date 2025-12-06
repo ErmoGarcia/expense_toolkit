@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import Optional
+from decimal import Decimal
 import re
 from ..database import get_db
 from ..models.expense import RawExpense, Expense
@@ -26,13 +28,45 @@ async def get_next_raw_expense(db: Session = Depends(get_db)):
     return raw_expense
 
 @router.get("/all")
-async def get_all_raw_expenses(db: Session = Depends(get_db)):
-    """Get all raw expenses to process (FIFO order)"""
-    raw_expenses = db.query(RawExpense).filter(
+async def get_all_raw_expenses(
+    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    amount_min: Optional[float] = Query(None, description="Minimum amount"),
+    amount_max: Optional[float] = Query(None, description="Maximum amount"),
+    source: Optional[str] = Query(None, description="Filter by source"),
+    search: Optional[str] = Query(None, description="Search in merchant/description"),
+    db: Session = Depends(get_db)
+):
+    """Get all raw expenses to process (FIFO order) with optional filters"""
+    query = db.query(RawExpense).filter(
         ~RawExpense.id.in_(
             db.query(Expense.raw_expense_id).filter(Expense.raw_expense_id.isnot(None))
         )
-    ).order_by(RawExpense.imported_at.asc()).all()
+    )
+    
+    # Apply filters
+    if date_from:
+        query = query.filter(RawExpense.transaction_date >= date_from)
+    
+    if date_to:
+        query = query.filter(RawExpense.transaction_date <= date_to)
+    
+    if amount_min is not None:
+        query = query.filter(RawExpense.amount >= Decimal(str(amount_min)))
+    
+    if amount_max is not None:
+        query = query.filter(RawExpense.amount <= Decimal(str(amount_max)))
+    
+    if source:
+        query = query.filter(RawExpense.source == source)
+    
+    if search:
+        query = query.filter(
+            (RawExpense.raw_merchant_name.contains(search)) |
+            (RawExpense.raw_description.contains(search))
+        )
+    
+    raw_expenses = query.order_by(RawExpense.imported_at.asc()).all()
     
     return raw_expenses
 

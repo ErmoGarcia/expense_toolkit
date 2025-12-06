@@ -210,15 +210,26 @@ class QueueProcessor {
         this.merchantAutocomplete = null;
         this.bulkMerchantAutocomplete = null;
         this.duplicates = {}; // Map of raw_expense_id -> duplicate info
+        this.filters = {
+            dateFrom: '',
+            dateTo: '',
+            amountMin: '',
+            amountMax: '',
+            source: '',
+            search: '',
+            showDuplicatesOnly: false
+        };
         this.init();
     }
 
     async init() {
         await this.loadCategories();
+        await this.loadSourceOptions();
         await this.loadAllItems();
         await this.updateQueueCount();
         this.setupKeyboardNavigation();
         this.setupButtonListeners();
+        this.setupFilterListeners();
     }
 
     async loadCategories() {
@@ -231,16 +242,40 @@ class QueueProcessor {
         }
     }
 
-    async loadAllItems() {
+    async loadAllItems(preserveFocus = false) {
         try {
-            const response = await fetch('/api/queue/all');
+            // Build query parameters with filters
+            const params = new URLSearchParams();
+            if (this.filters.dateFrom) params.append('date_from', this.filters.dateFrom);
+            if (this.filters.dateTo) params.append('date_to', this.filters.dateTo);
+            if (this.filters.amountMin) params.append('amount_min', this.filters.amountMin);
+            if (this.filters.amountMax) params.append('amount_max', this.filters.amountMax);
+            if (this.filters.source) params.append('source', this.filters.source);
+            if (this.filters.search) params.append('search', this.filters.search);
+            
+            const url = '/api/queue/all' + (params.toString() ? '?' + params.toString() : '');
+            const response = await fetch(url);
             const data = await response.json();
 
             if (Array.isArray(data) && data.length > 0) {
                 this.queueItems = data;
+                
+                // Apply client-side duplicate filter if needed
+                if (this.filters.showDuplicatesOnly) {
+                    this.queueItems = this.queueItems.filter(item => this.duplicates[item.id]);
+                }
+                
                 this.selectedIndex = 0;
                 this.selectedIds.clear();
                 this.renderListView();
+                
+                // Restore focus to search input if needed
+                if (preserveFocus) {
+                    const searchInput = document.getElementById('queueSearchInput');
+                    if (searchInput && document.activeElement !== searchInput) {
+                        searchInput.focus();
+                    }
+                }
             } else {
                 this.queueItems = [];
                 this.renderEmptyQueue();
@@ -279,6 +314,94 @@ class QueueProcessor {
         }
         if (rulesBtn) {
             rulesBtn.addEventListener('click', () => this.openRulesModal());
+        }
+    }
+
+    setupFilterListeners() {
+        // Date filters
+        const dateFrom = document.getElementById('queueDateFrom');
+        const dateTo = document.getElementById('queueDateTo');
+        const amountMin = document.getElementById('queueAmountMin');
+        const amountMax = document.getElementById('queueAmountMax');
+        const sourceFilter = document.getElementById('queueSourceFilter');
+        const searchInput = document.getElementById('queueSearchInput');
+
+        if (dateFrom) {
+            dateFrom.addEventListener('change', (e) => {
+                this.filters.dateFrom = e.target.value;
+                this.loadAllItems();
+            });
+        }
+
+        if (dateTo) {
+            dateTo.addEventListener('change', (e) => {
+                this.filters.dateTo = e.target.value;
+                this.loadAllItems();
+            });
+        }
+
+        if (amountMin) {
+            amountMin.addEventListener('change', (e) => {
+                this.filters.amountMin = e.target.value;
+                this.loadAllItems();
+            });
+        }
+
+        if (amountMax) {
+            amountMax.addEventListener('change', (e) => {
+                this.filters.amountMax = e.target.value;
+                this.loadAllItems();
+            });
+        }
+
+        if (sourceFilter) {
+            sourceFilter.addEventListener('change', (e) => {
+                this.filters.source = e.target.value;
+                this.loadAllItems();
+            });
+        }
+
+        if (searchInput) {
+            let searchTimeout;
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    this.filters.search = e.target.value;
+                    this.loadAllItems(true); // Preserve focus
+                }, 500);
+            });
+        }
+
+        const showDuplicatesOnly = document.getElementById('showDuplicatesOnly');
+        if (showDuplicatesOnly) {
+            showDuplicatesOnly.addEventListener('change', (e) => {
+                this.filters.showDuplicatesOnly = e.target.checked;
+                this.loadAllItems();
+            });
+        }
+    }
+
+    async loadSourceOptions() {
+        try {
+            // Get all raw expenses to extract unique sources
+            const response = await fetch('/api/queue/all');
+            const data = await response.json();
+            
+            if (Array.isArray(data)) {
+                const sources = [...new Set(data.map(item => item.source))].filter(Boolean);
+                const sourceFilter = document.getElementById('queueSourceFilter');
+                
+                if (sourceFilter) {
+                    sources.forEach(source => {
+                        const option = document.createElement('option');
+                        option.value = source;
+                        option.textContent = source;
+                        sourceFilter.appendChild(option);
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error loading source options:', error);
         }
     }
 
@@ -391,6 +514,19 @@ class QueueProcessor {
         this.updateListUI();
     }
 
+    toggleSelectAll(checked) {
+        if (checked) {
+            // Select all items currently visible (respects filters)
+            this.queueItems.forEach(item => {
+                this.selectedIds.add(item.id);
+            });
+        } else {
+            // Deselect all
+            this.selectedIds.clear();
+        }
+        this.updateListUI();
+    }
+
     updateListUI() {
         // Update item classes
         document.querySelectorAll('.queue-list-item').forEach(item => {
@@ -406,6 +542,16 @@ class QueueProcessor {
                 checkbox.textContent = this.selectedIds.has(itemId) ? '✓' : '';
             }
         });
+
+        // Update select-all checkbox state
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        if (selectAllCheckbox && this.queueItems.length > 0) {
+            const allSelected = this.queueItems.every(item => this.selectedIds.has(item.id));
+            const someSelected = this.queueItems.some(item => this.selectedIds.has(item.id));
+            
+            selectAllCheckbox.checked = allSelected;
+            selectAllCheckbox.indeterminate = someSelected && !allSelected;
+        }
 
         // Update bulk actions visibility
         const bulkActions = document.getElementById('bulkActions');
@@ -484,7 +630,9 @@ class QueueProcessor {
 
         document.getElementById('queueContent').innerHTML = `
             <div class="queue-list-header">
-                <div></div>
+                <div>
+                    <input type="checkbox" id="selectAllCheckbox" title="Select all (respects filters)" onchange="queueProcessor.toggleSelectAll(this.checked)">
+                </div>
                 <div>Date</div>
                 <div>Merchant</div>
                 <div>Amount</div>

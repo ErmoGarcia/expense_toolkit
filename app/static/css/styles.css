@@ -1465,3 +1465,18 @@ input:checked+.slider:before {
         font-size: 0.9rem;
     }
 }
+
+/* Queue Filters */
+.queue-filters {
+    margin-bottom: 2rem;
+}
+
+.queue-list-header input[type="checkbox"] {
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+}
+
+.queue-list-header input[type="checkbox"]:indeterminate {
+    opacity: 0.6;
+}

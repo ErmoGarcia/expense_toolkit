@@ -4,7 +4,7 @@ from typing import Optional, List
 from ..database import get_db
 from ..models.expense import Expense
 from ..models.category import Category
-from ..models.tag import Tag
+from ..models.tag import Tag, ExpenseTag
 from ..models.merchant import MerchantAlias
 from ..models.periodic_expense import PeriodicExpense
 
@@ -15,7 +15,7 @@ def serialize_expense(expense, include_children=False):
     # Check if this expense has children (is a group parent)
     child_expenses = getattr(expense, 'child_expenses', None) or []
     is_group = len(child_expenses) > 0
-    
+
     result = {
         "id": expense.id,
         "raw_expense_id": expense.raw_expense_id,
@@ -49,25 +49,23 @@ def serialize_expense(expense, include_children=False):
             "color": expense.category.color
         } if expense.category else None,
         "tags": [
-            {"id": tag.id, "name": tag.name, "color": tag.color}
-            for tag in expense.tags
-        ] if expense.tags else []
-    }
-    
-    # Include child expenses if requested
-    if include_children and child_expenses:
-        result["child_expenses"] = [
-            serialize_expense(child, include_children=False) 
-            for child in child_expenses
+            {
+                "id": tag.id,
+                "name": tag.name,
+                "color": tag.color
+            } for tag in (expense.tags or [])
         ]
-    
+    }
+
     return result
 
-@router.get("/")
+@router.get("")
 async def get_expenses(
     skip: int = Query(0, description="Number of records to skip"),
     limit: int = Query(50, description="Number of records to return"),
-    category_id: Optional[int] = Query(None, description="Filter by category"),
+    category: Optional[str] = Query(None, description="Filter by category ID"),
+    tags: Optional[str] = Query(None, description="Filter by tag ID"),
+    account: Optional[str] = Query(None, description="Filter by account ID"),
     search: Optional[str] = Query(None, description="Search in description/merchant"),
     date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
@@ -75,42 +73,74 @@ async def get_expenses(
     db: Session = Depends(get_db)
 ):
     """Get expenses with optional filters. Child expenses are excluded by default."""
-    query = db.query(Expense).options(
-        joinedload(Expense.merchant_alias),
-        joinedload(Expense.category),
-        joinedload(Expense.periodic_expense),
-        joinedload(Expense.tags),
-        joinedload(Expense.child_expenses)
-    )
-    
+    query = db.query(Expense)
+
     # Exclude child expenses (those with parent_expense_id) and archived expenses
     query = query.filter(Expense.parent_expense_id == None)
     query = query.filter(Expense.archived == False)
-    
+
     # Apply filters
-    if category_id:
-        query = query.filter(Expense.category_id == category_id)
-    
+    if category:
+        try:
+            category_id = int(category)
+            query = query.filter(Expense.category_id == category_id)
+        except ValueError:
+            pass  # Invalid category ID, ignore filter
+
+    if tags:
+        try:
+            tag_id = int(tags)
+            query = query.filter(Expense.tags.any(Tag.id == tag_id))
+        except ValueError:
+            pass  # Invalid tag ID, ignore filter
+
+    if account:
+        try:
+            account_id = int(account)
+            query = query.filter(Expense.bank_account_id == account_id)
+        except ValueError:
+            pass  # Invalid account ID, ignore filter
+
     if search:
         query = query.filter(
             Expense.description.contains(search) |
             Expense.merchant_alias.has(MerchantAlias.display_name.contains(search))
         )
-    
+
     if date_from:
         query = query.filter(Expense.transaction_date >= date_from)
-    
+
     if date_to:
         query = query.filter(Expense.transaction_date <= date_to)
-    
+
     # Order by date descending
     query = query.order_by(Expense.transaction_date.desc())
-    
+
     # Get total count (need separate query for count with joinedload)
     count_query = db.query(Expense).filter(Expense.parent_expense_id == None)
     count_query = count_query.filter(Expense.archived == False)
-    if category_id:
-        count_query = count_query.filter(Expense.category_id == category_id)
+
+    if category:
+        try:
+            category_id = int(category)
+            count_query = count_query.filter(Expense.category_id == category_id)
+        except ValueError:
+            pass
+
+    if tags:
+        try:
+            tag_id = int(tags)
+            count_query = count_query.filter(Expense.tags.any(Tag.id == tag_id))
+        except ValueError:
+            pass
+
+    if account:
+        try:
+            account_id = int(account)
+            count_query = count_query.filter(Expense.bank_account_id == account_id)
+        except ValueError:
+            pass
+
     if search:
         count_query = count_query.filter(
             Expense.description.contains(search) |
@@ -120,12 +150,13 @@ async def get_expenses(
         count_query = count_query.filter(Expense.transaction_date >= date_from)
     if date_to:
         count_query = count_query.filter(Expense.transaction_date <= date_to)
+
     total = count_query.count()
-    
+
     expenses = query.offset(skip).limit(limit).all()
-    
+
     return {
-        "expenses": [serialize_expense(e, include_children=include_children) for e in expenses],
+        "expenses": [serialize_expense(expense, include_children) for expense in expenses],
         "total": total,
         "skip": skip,
         "limit": limit
