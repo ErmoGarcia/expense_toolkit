@@ -7,9 +7,12 @@ from ..models.merchant import MerchantAlias
 router = APIRouter()
 
 @router.get("/")
-async def get_merchants(db: Session = Depends(get_db)):
-    """Get all merchant aliases"""
-    merchants = db.query(MerchantAlias).order_by(MerchantAlias.display_name).all()
+async def get_merchants(q: str = None, db: Session = Depends(get_db)):
+    """Get all merchant aliases, optionally filtered by query"""
+    query = db.query(MerchantAlias)
+    if q:
+        query = query.filter(MerchantAlias.display_name.ilike(f"%{q}%"))
+    merchants = query.order_by(MerchantAlias.display_name).all()
     return merchants
 
 @router.post("/")

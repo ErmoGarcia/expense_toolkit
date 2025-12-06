@@ -1,5 +1,198 @@
 // Queue Processing JavaScript
 
+class Autocomplete {
+    constructor(input, options) {
+        this.input = input;
+        this.options = options;
+        this.suggestions = [];
+        this.selectedIndex = -1;
+        this.container = null;
+        this.onSelect = options.onSelect || (() => {});
+        this.onCreate = options.onCreate || (() => {});
+        this.allowCreate = options.allowCreate !== false;
+        this.minLength = options.minLength || 1;
+        this.debounceTimer = null;
+        this.debounceDelay = 300;
+
+        this.init();
+    }
+
+    init() {
+        this.createContainer();
+        this.bindEvents();
+    }
+
+    createContainer() {
+        this.container = document.createElement('div');
+        this.container.className = 'autocomplete-container';
+        this.container.style.cssText = `
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ced4da;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        `;
+        this.input.parentNode.style.position = 'relative';
+        this.input.parentNode.appendChild(this.container);
+    }
+
+    bindEvents() {
+        this.input.addEventListener('input', (e) => this.onInput(e));
+        this.input.addEventListener('keydown', (e) => this.onKeydown(e));
+        this.input.addEventListener('blur', () => setTimeout(() => this.hide(), 150));
+        this.input.addEventListener('focus', () => this.onInput({ target: this.input }));
+    }
+
+    async onInput(e) {
+        const value = e.target.value.trim();
+        this.selectedIndex = -1;
+
+        if (value.length < this.minLength) {
+            this.hide();
+            return;
+        }
+
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(async () => {
+            await this.fetchSuggestions(value);
+        }, this.debounceDelay);
+    }
+
+    async fetchSuggestions(query) {
+        try {
+            const response = await fetch(`${this.options.endpoint}?q=${encodeURIComponent(query)}`);
+            this.suggestions = await response.json();
+            this.renderSuggestions(query);
+        } catch (error) {
+            console.error('Error fetching suggestions:', error);
+            this.suggestions = [];
+            this.hide();
+        }
+    }
+
+    renderSuggestions(query) {
+        if (this.suggestions.length === 0 && !this.allowCreate) {
+            this.hide();
+            return;
+        }
+
+        this.container.innerHTML = '';
+
+        // Existing suggestions
+        this.suggestions.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'autocomplete-item';
+            div.textContent = this.options.displayField ? item[this.options.displayField] : item.name || item.display_name;
+            div.addEventListener('click', () => this.selectItem(item));
+            div.addEventListener('mouseenter', () => this.setSelectedIndex(index));
+            this.container.appendChild(div);
+        });
+
+        // Create new option
+        if (this.allowCreate && query && !this.suggestions.some(item =>
+            (item.name || item.display_name).toLowerCase() === query.toLowerCase()
+        )) {
+            const div = document.createElement('div');
+            div.className = 'autocomplete-item create-new';
+            div.innerHTML = `<em>Create "${query}"</em>`;
+            div.addEventListener('click', () => this.createNew(query));
+            div.addEventListener('mouseenter', () => this.setSelectedIndex(this.suggestions.length));
+            this.container.appendChild(div);
+        }
+
+        this.show();
+    }
+
+    setSelectedIndex(index) {
+        // Remove previous selection
+        const items = this.container.querySelectorAll('.autocomplete-item');
+        items.forEach(item => item.classList.remove('selected'));
+
+        // Add new selection
+        if (items[index]) {
+            items[index].classList.add('selected');
+            this.selectedIndex = index;
+        }
+    }
+
+    onKeydown(e) {
+        if (!this.container.style.display || this.container.style.display === 'none') return;
+
+        const items = this.container.querySelectorAll('.autocomplete-item');
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                this.selectedIndex = Math.min(this.selectedIndex + 1, items.length - 1);
+                this.setSelectedIndex(this.selectedIndex);
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                this.selectedIndex = Math.max(this.selectedIndex - 1, -1);
+                this.setSelectedIndex(this.selectedIndex);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (this.selectedIndex >= 0 && items[this.selectedIndex]) {
+                    const isCreateNew = items[this.selectedIndex].classList.contains('create-new');
+                    if (isCreateNew) {
+                        this.createNew(this.input.value.trim());
+                    } else {
+                        this.selectItem(this.suggestions[this.selectedIndex]);
+                    }
+                }
+                break;
+            case 'Escape':
+                this.hide();
+                break;
+        }
+    }
+
+    selectItem(item) {
+        this.input.value = this.options.displayField ? item[this.options.displayField] : item.name || item.display_name;
+        this.onSelect(item);
+        this.hide();
+    }
+
+    async createNew(value) {
+        try {
+            const response = await fetch(this.options.endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.options.createData(value))
+            });
+
+            if (response.ok) {
+                const newItem = await response.json();
+                this.input.value = this.options.displayField ? newItem[this.options.displayField] : newItem.name || newItem.display_name;
+                this.onCreate(newItem);
+                this.hide();
+            } else {
+                console.error('Failed to create new item');
+            }
+        } catch (error) {
+            console.error('Error creating new item:', error);
+        }
+    }
+
+    show() {
+        this.container.style.display = 'block';
+    }
+
+    hide() {
+        this.container.style.display = 'none';
+        this.selectedIndex = -1;
+    }
+}
+
 class QueueProcessor {
     constructor() {
         this.queueItems = [];
@@ -9,7 +202,10 @@ class QueueProcessor {
         this.categories = [];
         this.tags = [];
         this.currentTags = [];
-        this.viewMode = 'list'; // 'list' or 'detail'
+        this.viewMode = 'list'; // 'list', 'detail', or 'bulk'
+        this.bulkTags = [];
+        this.merchantAutocomplete = null;
+        this.bulkMerchantAutocomplete = null;
         this.init();
     }
 
@@ -61,6 +257,8 @@ class QueueProcessor {
                 this.handleListKeyboard(e);
             } else if (this.viewMode === 'detail') {
                 this.handleDetailKeyboard(e);
+            } else if (this.viewMode === 'bulk') {
+                this.handleBulkKeyboard(e);
             }
         });
     }
@@ -101,7 +299,7 @@ class QueueProcessor {
             this.discardSelected();
         } else if (e.key === 's' && this.selectedIds.size > 0) {
             e.preventDefault();
-            this.saveSelected();
+            this.openBulkSaveModal();
         }
     }
 
@@ -122,6 +320,13 @@ class QueueProcessor {
         } else if (e.key === 'p') {
             e.preventDefault();
             this.goToPrevious();
+        }
+    }
+
+    handleBulkKeyboard(e) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            this.closeBulkSaveModal();
         }
     }
 
@@ -151,6 +356,12 @@ class QueueProcessor {
 
             item.classList.toggle('focused', index === this.selectedIndex);
             item.classList.toggle('selected', this.selectedIds.has(itemId));
+            
+            // Update checkbox indicator
+            const checkbox = item.querySelector('.checkbox-indicator');
+            if (checkbox) {
+                checkbox.textContent = this.selectedIds.has(itemId) ? '✓' : '';
+            }
         });
 
         // Update bulk actions visibility
@@ -239,7 +450,7 @@ class QueueProcessor {
                     <button class="btn btn-danger btn-small" onclick="queueProcessor.discardSelected()">
                         Discard Selected <kbd>X</kbd>
                     </button>
-                    <button class="btn btn-primary btn-small" onclick="queueProcessor.saveSelected()">
+                    <button class="btn btn-primary btn-small" onclick="queueProcessor.openBulkSaveModal()">
                         Save Selected <kbd>S</kbd>
                     </button>
                     <button class="btn btn-secondary btn-small" onclick="queueProcessor.clearSelection()">
@@ -257,6 +468,7 @@ class QueueProcessor {
 
         // Focus the list for keyboard navigation
         document.getElementById('queueList').focus();
+        this.updateListUI();
     }
 
     handleItemClick(event, index) {
@@ -320,11 +532,267 @@ class QueueProcessor {
         }
     }
 
-    async saveSelected() {
+    // Bulk Save Modal
+    openBulkSaveModal() {
         if (this.selectedIds.size === 0) return;
+        
+        this.viewMode = 'bulk';
+        this.bulkTags = [];
+        
+        const selectedItems = this.queueItems.filter(item => this.selectedIds.has(item.id));
+        const totalAmount = selectedItems.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+        
+        // Create modal HTML
+        const modalHtml = `
+            <div class="modal-overlay" id="bulkModal" onclick="queueProcessor.handleModalClick(event)">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Bulk Save ${this.selectedIds.size} Expense${this.selectedIds.size > 1 ? 's' : ''}</h2>
+                        <button class="modal-close" onclick="queueProcessor.closeBulkSaveModal()">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="bulk-summary">
+                            <div class="bulk-summary-item">
+                                <strong>Items:</strong> ${this.selectedIds.size}
+                            </div>
+                            <div class="bulk-summary-item">
+                                <strong>Total:</strong> 
+                                <span class="${totalAmount < 0 ? 'negative' : 'positive'}">
+                                    ${totalAmount < 0 ? '-' : ''}£${Math.abs(totalAmount).toFixed(2)}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="bulk-items-preview">
+                            <strong>Selected Items:</strong>
+                            <div class="bulk-items-list">
+                                ${selectedItems.map(item => `
+                                    <div class="bulk-item-row">
+                                        <span class="bulk-item-date">${this.formatDate(item.transaction_date)}</span>
+                                        <span class="bulk-item-merchant">${item.raw_merchant_name || 'Unknown'}</span>
+                                        <span class="bulk-item-amount ${parseFloat(item.amount) < 0 ? 'negative' : 'positive'}">
+                                            ${parseFloat(item.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(item.amount)).toFixed(2)}
+                                        </span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        
+                        <form id="bulkSaveForm" onsubmit="queueProcessor.processBulkSave(event)">
+                            <div class="form-group">
+                                <label for="bulkMerchantName">Merchant Alias (applied to all)</label>
+                                <input type="text" id="bulkMerchantName" placeholder="Start typing to see suggestions..." required>
+                            </div>
 
-        // For bulk save, we need merchant suggestions - this opens a modal or processes with defaults
-        alert('Bulk save requires merchant and category information. Please process items individually or implement a bulk processing modal.');
+                            <div class="form-group">
+                                <label for="bulkCategorySelect">Category (applied to all)</label>
+                                <select id="bulkCategorySelect" required>
+                                    <option value="">Select a category</option>
+                                    ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="bulkDescription">Description (optional, applied to all)</label>
+                                <input type="text" id="bulkDescription" placeholder="Add a description">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="bulkTagInput">Tags (applied to all)</label>
+                                <input type="text" id="bulkTagInput" placeholder="Start typing to see existing tags..." autocomplete="off">
+                                <div class="tags-input" id="bulkTagsContainer">
+                                    <!-- Tags will be added here -->
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeBulkSaveModal()">
+                            Cancel <kbd>Esc</kbd>
+                        </button>
+                        <button type="submit" form="bulkSaveForm" class="btn btn-primary" id="bulkSaveBtn">
+                            Save All ${this.selectedIds.size} Items
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Append modal to body
+        const modalContainer = document.createElement('div');
+        modalContainer.id = 'modalContainer';
+        modalContainer.innerHTML = modalHtml;
+        document.body.appendChild(modalContainer);
+        
+        // Setup tag input
+        this.setupBulkTagInput();
+        
+        // Focus merchant input
+        document.getElementById('bulkMerchantName').focus();
+    }
+
+    setupBulkTagInput() {
+        // Initialize autocomplete for bulk merchant
+        const bulkMerchantInput = document.getElementById('bulkMerchantName');
+        this.bulkMerchantAutocomplete = new Autocomplete(bulkMerchantInput, {
+            endpoint: '/api/merchants',
+            displayField: 'display_name',
+            onSelect: (merchant) => {
+                // Set default category if available
+                if (merchant.default_category_id) {
+                    document.getElementById('bulkCategorySelect').value = merchant.default_category_id;
+                }
+            },
+            createData: (value) => ({
+                raw_name: value,
+                display_name: value
+            })
+        });
+
+        // Initialize autocomplete for bulk tags
+        const bulkTagInput = document.getElementById('bulkTagInput');
+        new Autocomplete(bulkTagInput, {
+            endpoint: '/api/tags',
+            displayField: 'name',
+            onSelect: (tag) => {
+                this.addBulkTag(tag.name);
+                bulkTagInput.value = '';
+            },
+            onCreate: (tag) => {
+                this.addBulkTag(tag.name);
+                bulkTagInput.value = '';
+            },
+            createData: (value) => ({
+                name: value
+            })
+        });
+
+        // Fallback for bulk tag input
+        bulkTagInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = bulkTagInput.value.trim();
+                if (value) {
+                    this.addBulkTag(value);
+                    bulkTagInput.value = '';
+                }
+            }
+        });
+    }
+
+    addBulkTag(tagName) {
+        if (!tagName || this.bulkTags.includes(tagName)) return;
+        this.bulkTags.push(tagName);
+        this.renderBulkTags();
+    }
+
+    removeBulkTag(tagName) {
+        this.bulkTags = this.bulkTags.filter(tag => tag !== tagName);
+        this.renderBulkTags();
+    }
+
+    renderBulkTags() {
+        const container = document.getElementById('bulkTagsContainer');
+        container.innerHTML = this.bulkTags.map(tag => `
+            <div class="tag-item">
+                #${tag}
+                <button type="button" class="tag-remove" onclick="queueProcessor.removeBulkTag('${tag}')">×</button>
+            </div>
+        `).join('');
+    }
+
+    handleModalClick(event) {
+        // Close modal if clicking on overlay
+        if (event.target.id === 'bulkModal') {
+            this.closeBulkSaveModal();
+        }
+    }
+
+    closeBulkSaveModal() {
+        const modalContainer = document.getElementById('modalContainer');
+        if (modalContainer) {
+            modalContainer.remove();
+        }
+        this.viewMode = 'list';
+        this.bulkTags = [];
+    }
+
+    async processBulkSave(event) {
+        event.preventDefault();
+        
+        const merchantName = document.getElementById('bulkMerchantName').value;
+        const categoryId = parseInt(document.getElementById('bulkCategorySelect').value);
+        const description = document.getElementById('bulkDescription').value;
+        
+        if (!merchantName || !categoryId) {
+            alert('Please fill in merchant name and category');
+            return;
+        }
+        
+        const idsToProcess = Array.from(this.selectedIds);
+        let successCount = 0;
+        let errorCount = 0;
+        
+        // Disable the save button
+        const saveBtn = document.getElementById('bulkSaveBtn');
+        const originalText = saveBtn.textContent;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        
+        for (const id of idsToProcess) {
+            const formData = {
+                raw_expense_id: id,
+                merchant_name: merchantName,
+                category_id: categoryId,
+                description: description,
+                tags: this.bulkTags
+            };
+
+            try {
+                const response = await fetch('/api/queue/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                    console.error(`Failed to process item ${id}`);
+                }
+            } catch (error) {
+                errorCount++;
+                console.error(`Error processing item ${id}:`, error);
+            }
+        }
+        
+        // Close modal
+        this.closeBulkSaveModal();
+        
+        // Remove processed items from queue
+        this.queueItems = this.queueItems.filter(item => !this.selectedIds.has(item.id));
+        this.selectedIds.clear();
+        
+        // Adjust index if needed
+        if (this.selectedIndex >= this.queueItems.length && this.queueItems.length > 0) {
+            this.selectedIndex = this.queueItems.length - 1;
+        }
+        
+        await this.updateQueueCount();
+        
+        // Show result
+        if (errorCount > 0) {
+            alert(`Saved ${successCount} items. ${errorCount} items failed.`);
+        }
+        
+        if (this.queueItems.length === 0) {
+            this.renderEmptyQueue();
+        } else {
+            this.renderListView();
+        }
     }
 
     async suggestMerchant() {
@@ -335,8 +803,7 @@ class QueueProcessor {
             const suggestion = await response.json();
 
             if (suggestion.suggestion) {
-                document.getElementById('merchantSuggestion').textContent =
-                    `Suggested: "${suggestion.suggestion}" (${suggestion.confidence}% match)`;
+                // Pre-fill the merchant input with the suggestion
                 document.getElementById('merchantName').value = suggestion.suggestion;
 
                 if (suggestion.merchant?.default_category_id) {
@@ -389,18 +856,9 @@ class QueueProcessor {
 
             <!-- Processing Form -->
             <form class="process-form" id="processForm">
-                <div class="btn-group">
-                    <button type="button" class="btn btn-secondary" onclick="queueProcessor.goToPrevious()" ${this.selectedIndex === 0 ? 'disabled' : ''}>
-                        ← Previous <kbd>P</kbd>
-                    </button>
-                    <button type="button" class="btn btn-secondary" onclick="queueProcessor.goToNext()" ${this.selectedIndex >= this.queueItems.length - 1 ? 'disabled' : ''}>
-                        Next → <kbd>N</kbd>
-                    </button>
-                </div>
                 <div class="form-group">
                     <label for="merchantName">Merchant Alias</label>
-                    <input type="text" id="merchantName" placeholder="Enter merchant name (e.g., Amazon)" required>
-                    <div class="suggestion" id="merchantSuggestion"></div>
+                    <input type="text" id="merchantName" placeholder="Start typing to see suggestions..." required>
                 </div>
 
                 <div class="form-group">
@@ -418,7 +876,7 @@ class QueueProcessor {
 
                 <div class="form-group">
                     <label for="tagInput">Tags</label>
-                    <input type="text" id="tagInput" placeholder="Add a tag and press Enter">
+                    <input type="text" id="tagInput" placeholder="Start typing to see existing tags..." autocomplete="off">
                     <div class="tags-input" id="tagsContainer">
                         <!-- Tags will be added here -->
                     </div>
@@ -427,6 +885,12 @@ class QueueProcessor {
                 <div class="btn-group">
                     <button type="button" class="btn btn-danger" onclick="queueProcessor.discardItem()">
                         Discard <kbd>X</kbd>
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="queueProcessor.goToPrevious()" ${this.selectedIndex === 0 ? 'disabled' : ''}>
+                        ← Previous <kbd>P</kbd>
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="queueProcessor.goToNext()" ${this.selectedIndex >= this.queueItems.length - 1 ? 'disabled' : ''}>
+                        Next → <kbd>N</kbd>
                     </button>
                     <button type="submit" class="btn btn-primary">
                         Save <kbd>Ctrl+Enter</kbd>
@@ -445,13 +909,50 @@ class QueueProcessor {
             this.processItem();
         });
 
-        // Tag input
+        // Initialize autocomplete for merchant
+        const merchantInput = document.getElementById('merchantName');
+        this.merchantAutocomplete = new Autocomplete(merchantInput, {
+            endpoint: '/api/merchants',
+            displayField: 'display_name',
+            onSelect: (merchant) => {
+                // Set default category if available
+                if (merchant.default_category_id) {
+                    document.getElementById('categorySelect').value = merchant.default_category_id;
+                }
+            },
+            createData: (value) => ({
+                raw_name: this.currentItem?.raw_merchant_name || value,
+                display_name: value
+            })
+        });
+
+        // Initialize autocomplete for tags
         const tagInput = document.getElementById('tagInput');
+        new Autocomplete(tagInput, {
+            endpoint: '/api/tags',
+            displayField: 'name',
+            onSelect: (tag) => {
+                this.addTag(tag.name);
+                tagInput.value = '';
+            },
+            onCreate: (tag) => {
+                this.addTag(tag.name);
+                tagInput.value = '';
+            },
+            createData: (value) => ({
+                name: value
+            })
+        });
+
+        // Tag input enter key (fallback)
         tagInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                this.addTag(tagInput.value.trim());
-                tagInput.value = '';
+                const value = tagInput.value.trim();
+                if (value) {
+                    this.addTag(value);
+                    tagInput.value = '';
+                }
             }
         });
     }

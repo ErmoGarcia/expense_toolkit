@@ -6,9 +6,12 @@ from ..models.tag import Tag
 router = APIRouter()
 
 @router.get("/")
-async def get_tags(db: Session = Depends(get_db)):
-    """Get all tags"""
-    tags = db.query(Tag).order_by(Tag.name).all()
+async def get_tags(q: str = None, db: Session = Depends(get_db)):
+    """Get all tags, optionally filtered by query"""
+    query = db.query(Tag)
+    if q:
+        query = query.filter(Tag.name.ilike(f"%{q}%"))
+    tags = query.order_by(Tag.name).all()
     return tags
 
 @router.post("/")
