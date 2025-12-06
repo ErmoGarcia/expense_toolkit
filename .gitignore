@@ -215,3 +215,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Imports directory (contains personal financial data)
+imports/
+
+# Keep examples directory tracked
+!examples/

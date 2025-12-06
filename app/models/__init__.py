@@ -4,6 +4,7 @@ from .expense import Expense, RawExpense
 from .merchant import MerchantAlias
 from .tag import Tag, ExpenseTag
 from .import_history import ImportHistory
+from .notification import RawNotification
 
 __all__ = [
     "BankAccount",
@@ -13,5 +14,6 @@ __all__ = [
     "MerchantAlias",
     "Tag",
     "ExpenseTag",
-    "ImportHistory"
+    "ImportHistory",
+    "RawNotification"
 ]

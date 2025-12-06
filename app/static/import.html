@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Toolkit - Import</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <a href="/" class="logo">Expense Toolkit</a>
+                <nav class="nav">
+                    <a href="/" class="nav-link">Expenses</a>
+                    <a href="/queue" class="nav-link">
+                        Queue
+                        <span class="queue-badge" id="queueCount">0</span>
+                    </a>
+                    <a href="/import" class="nav-link active">Import</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Upload Section -->
+        <section class="import-container">
+            <div class="import-header">
+                <h1>Import Bank Statement</h1>
+                <p>Upload an XLSX or CSV file exported from your bank</p>
+            </div>
+
+            <div class="upload-section">
+                <form id="uploadForm" class="upload-form">
+                    <div class="form-group">
+                        <label for="bankAccount">Bank Account (optional)</label>
+                        <select id="bankAccount" name="bank_account_id">
+                            <option value="">Select account...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fileInput">Select File</label>
+                        <div class="file-input-wrapper">
+                            <input type="file" id="fileInput" name="file" accept=".xlsx,.xls,.csv">
+                            <div class="file-drop-zone" id="dropZone">
+                                <div class="drop-zone-content">
+                                    <span class="drop-icon">📁</span>
+                                    <p>Drag and drop your file here, or click to browse</p>
+                                    <p class="file-types">Accepted formats: .xlsx, .xls, .csv</p>
+                                </div>
+                            </div>
+                            <div class="selected-file" id="selectedFile" style="display: none;">
+                                <span class="file-icon">📄</span>
+                                <span class="file-name" id="fileName"></span>
+                                <button type="button" class="file-remove" id="removeFile">&times;</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary" id="uploadBtn" disabled>
+                            Upload File
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Import History Section -->
+        <section class="import-history">
+            <div class="history-header">
+                <h2>Import History</h2>
+                <button class="btn btn-primary" id="processAllBtn" style="display: none;">
+                    Process All Pending
+                </button>
+            </div>
+            <div id="historyContent">
+                <div class="loading-message">Loading import history...</div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/js/import.js"></script>
+</body>
+</html>

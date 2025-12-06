@@ -2,20 +2,23 @@ import os
 from pathlib import Path
 
 class Settings:
-    # Database
-    DATABASE_URL = "sqlite:///./data/expenses.db"
-    DATABASE_PATH = Path("./data/expenses.db")
-    
     # Directories
     BASE_DIR = Path(__file__).parent.parent
+    
+    # Database - use absolute path based on BASE_DIR
+    DATA_DIR = BASE_DIR / "data"
+    DATABASE_PATH = DATA_DIR / "expenses.db"
+    DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
     IMPORTS_DIR = BASE_DIR / "imports"
+    XLSX_DIR = IMPORTS_DIR / "xlsx"
+    NOTIFICATIONS_DIR = IMPORTS_DIR / "notifications"
     STATIC_DIR = BASE_DIR / "app" / "static"
     
     # API Settings
     API_V1_STR = "/api"
     PROJECT_NAME = "Expense Toolkit"
     
-    # GoCardless Bank Data API (Nordigen)
+    # GoCardless Bank Data API (Nordigen) - keeping for potential future use
     GOCARDLESS_SECRET_ID = os.getenv("GOCARDLESS_SECRET_ID", "")
     GOCARDLESS_SECRET_KEY = os.getenv("GOCARDLESS_SECRET_KEY", "")
     GOCARDLESS_BASE_URL = "https://bankaccountdata.gocardless.com/api/v2"
@@ -26,7 +29,9 @@ class Settings:
     
     def __init__(self):
         # Ensure directories exist
-        self.DATABASE_PATH.parent.mkdir(exist_ok=True)
+        self.DATA_DIR.mkdir(exist_ok=True)
         self.IMPORTS_DIR.mkdir(exist_ok=True)
+        self.XLSX_DIR.mkdir(exist_ok=True)
+        self.NOTIFICATIONS_DIR.mkdir(exist_ok=True)
 
 settings = Settings()
