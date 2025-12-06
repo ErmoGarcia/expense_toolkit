@@ -503,3 +503,216 @@ body {
 .error-message {
     color: #dc3545;
 }
+
+/* Queue List View */
+.queue-list-header {
+    display: grid;
+    grid-template-columns: 40px 100px 1fr 120px 100px;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+    font-weight: 600;
+    color: #495057;
+}
+
+.queue-list {
+    max-height: 60vh;
+    overflow-y: auto;
+    outline: none;
+}
+
+.queue-list-item {
+    display: grid;
+    grid-template-columns: 40px 100px 1fr 120px 100px;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    cursor: pointer;
+    transition: background-color 0.15s, border-left 0.15s;
+    border-left: 3px solid transparent;
+}
+
+.queue-list-item:hover {
+    background-color: #f8f9fa;
+}
+
+.queue-list-item.focused {
+    border-left: 3px solid #007bff;
+    background-color: #f0f7ff;
+}
+
+.queue-list-item.selected {
+    background-color: #e7f1ff;
+}
+
+.queue-list-item.focused.selected {
+    background-color: #d4e6ff;
+}
+
+.queue-item-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.checkbox-indicator {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #ced4da;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #007bff;
+    background-color: white;
+}
+
+.queue-list-item.selected .checkbox-indicator {
+    background-color: #007bff;
+    border-color: #007bff;
+    color: white;
+}
+
+.queue-item-date {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.queue-item-merchant {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.queue-item-amount {
+    font-weight: 600;
+    text-align: right;
+}
+
+.queue-item-amount.negative {
+    color: #dc3545;
+}
+
+.queue-item-amount.positive {
+    color: #28a745;
+}
+
+.queue-item-source {
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+.queue-list-footer {
+    padding: 1rem;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.bulk-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    background-color: #e7f1ff;
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+
+#selectionCount {
+    font-weight: 500;
+    color: #495057;
+}
+
+.keyboard-hints {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.keyboard-hint {
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+/* Keyboard shortcut indicator */
+kbd {
+    display: inline-block;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.75rem;
+    font-family: monospace;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+}
+
+.btn-danger kbd {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-primary kbd {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-secondary kbd {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-back kbd {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+/* Detail View Navigation */
+.detail-nav-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.btn-back {
+    background: none;
+    border: 1px solid #ced4da;
+    color: #495057;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.15s;
+}
+
+.btn-back:hover {
+    background-color: #f8f9fa;
+}
+
+.position-indicator {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+/* Responsive queue list */
+@media (max-width: 768px) {
+    .queue-list-header,
+    .queue-list-item {
+        grid-template-columns: 40px 1fr 100px;
+    }
+    
+    .queue-item-source,
+    .queue-list-header > div:nth-child(5),
+    .queue-item-date,
+    .queue-list-header > div:nth-child(2) {
+        display: none;
+    }
+    
+    .bulk-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}

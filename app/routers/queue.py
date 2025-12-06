@@ -22,6 +22,17 @@ async def get_next_raw_expense(db: Session = Depends(get_db)):
     
     return raw_expense
 
+@router.get("/all")
+async def get_all_raw_expenses(db: Session = Depends(get_db)):
+    """Get all raw expenses to process (FIFO order)"""
+    raw_expenses = db.query(RawExpense).filter(
+        ~RawExpense.id.in_(
+            db.query(Expense.raw_expense_id).filter(Expense.raw_expense_id.isnot(None))
+        )
+    ).order_by(RawExpense.imported_at.asc()).all()
+    
+    return raw_expenses
+
 @router.get("/count")
 async def get_queue_count(db: Session = Depends(get_db)):
     """Get the number of unprocessed raw expenses"""
