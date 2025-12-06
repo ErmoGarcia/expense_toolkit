@@ -6,6 +6,7 @@ from ..models.expense import Expense
 from ..models.category import Category
 from ..models.tag import Tag
 from ..models.merchant import MerchantAlias
+from ..models.periodic_expense import PeriodicExpense
 
 router = APIRouter()
 
@@ -22,12 +23,19 @@ def serialize_expense(expense):
         "category_id": expense.category_id,
         "description": expense.description,
         "notes": expense.notes,
+        "latitude": expense.latitude,
+        "longitude": expense.longitude,
+        "periodic_expense_id": expense.periodic_expense_id,
         "is_recurring": expense.is_recurring,
         "merchant_alias": {
             "id": expense.merchant_alias.id,
             "display_name": expense.merchant_alias.display_name,
             "raw_name": expense.merchant_alias.raw_name
         } if expense.merchant_alias else None,
+        "periodic_expense": {
+            "id": expense.periodic_expense.id,
+            "name": expense.periodic_expense.name
+        } if expense.periodic_expense else None,
         "category": {
             "id": expense.category.id,
             "name": expense.category.name,
@@ -53,6 +61,7 @@ async def get_expenses(
     query = db.query(Expense).options(
         joinedload(Expense.merchant_alias),
         joinedload(Expense.category),
+        joinedload(Expense.periodic_expense),
         joinedload(Expense.tags)
     )
     

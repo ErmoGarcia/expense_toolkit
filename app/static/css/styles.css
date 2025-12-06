@@ -1049,6 +1049,13 @@ input:checked+.slider:before {
     transform: translateX(26px);
 }
 
+.form-group .switch-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
 /* Tools Modal */
 .tools-options {
     display: flex;

@@ -3,8 +3,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from .config import settings
 from .database import create_tables
-from .routers import expenses, queue, categories, tags, merchants, import_xlsx, notifications
+from .routers import expenses, queue, categories, tags, merchants, import_xlsx, notifications, periodic_expenses
 from .routers.rules import router as rules_router
+from .routers.periodic_expenses import router as periodic_expenses_router
 
 # Create FastAPI app
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -23,6 +24,7 @@ app.include_router(merchants.router, prefix=f"{settings.API_V1_STR}/merchants", 
 app.include_router(import_xlsx.router, prefix=f"{settings.API_V1_STR}/import", tags=["import"])
 app.include_router(notifications.router, prefix=f"{settings.API_V1_STR}/notifications", tags=["notifications"])
 app.include_router(rules_router, prefix=f"{settings.API_V1_STR}/rules", tags=["rules"])
+app.include_router(periodic_expenses_router, prefix=f"{settings.API_V1_STR}/periodic-expenses", tags=["periodic-expenses"])
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")

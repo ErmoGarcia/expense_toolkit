@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, Date, Boolean, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, Date, Boolean, Float, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from ..database import Base
@@ -39,6 +39,9 @@ class Expense(Base):
     category_id = Column(Integer, ForeignKey("categories.id"))
     description = Column(String)  # user-added description
     notes = Column(String)  # optional longer notes
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    periodic_expense_id = Column(Integer, ForeignKey("periodic_expenses.id"), nullable=True)
     is_recurring = Column(Boolean, default=False)
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -49,4 +52,5 @@ class Expense(Base):
     bank_account = relationship("BankAccount")
     merchant_alias = relationship("MerchantAlias")
     category = relationship("Category")
+    periodic_expense = relationship("PeriodicExpense")
     tags = relationship("Tag", secondary="expense_tags")

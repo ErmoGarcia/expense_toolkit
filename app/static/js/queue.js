@@ -629,14 +629,29 @@ class QueueProcessor {
                                 <input type="text" id="bulkDescription" placeholder="Add a description">
                             </div>
 
-                            <div class="form-group">
-                                <label for="bulkTagInput">Tags (applied to all)</label>
-                                <input type="text" id="bulkTagInput" placeholder="Start typing to see existing tags..." autocomplete="off">
-                                <div class="tags-input" id="bulkTagsContainer">
-                                    <!-- Tags will be added here -->
-                                </div>
-                            </div>
-                        </form>
+                             <div class="form-group">
+                                 <label for="bulkTagInput">Tags (applied to all)</label>
+                                 <input type="text" id="bulkTagInput" placeholder="Start typing to see existing tags..." autocomplete="off">
+                                 <div class="tags-input" id="bulkTagsContainer">
+                                     <!-- Tags will be added here -->
+                                 </div>
+                             </div>
+
+                             <div class="form-group">
+                                 <label class="switch-label">
+                                     Periodic expenses (applied to all)
+                                     <label class="switch">
+                                         <input type="checkbox" id="bulkIsPeriodic">
+                                         <span class="slider"></span>
+                                     </label>
+                                 </label>
+                             </div>
+
+                             <div class="form-group" id="bulkPeriodicExpenseGroup" style="display: none;">
+                                 <label for="bulkPeriodicExpenseName">Periodic Expense Name (applied to all)</label>
+                                 <input type="text" id="bulkPeriodicExpenseName" placeholder="Start typing to see suggestions..." autocomplete="off">
+                             </div>
+                         </form>
                     </div>
                     
                     <div class="modal-footer">
@@ -710,6 +725,28 @@ class QueueProcessor {
                     bulkTagInput.value = '';
                 }
             }
+        });
+
+        // Bulk periodic expense checkbox toggle
+        document.getElementById('bulkIsPeriodic').addEventListener('change', (e) => {
+            const periodicGroup = document.getElementById('bulkPeriodicExpenseGroup');
+            periodicGroup.style.display = e.target.checked ? 'block' : 'none';
+            if (!e.target.checked) {
+                document.getElementById('bulkPeriodicExpenseName').value = '';
+            }
+        });
+
+        // Initialize autocomplete for bulk periodic expense
+        const bulkPeriodicInput = document.getElementById('bulkPeriodicExpenseName');
+        new Autocomplete(bulkPeriodicInput, {
+            endpoint: '/api/periodic-expenses',
+            displayField: 'name',
+            onSelect: (periodic) => {
+                // Optional: do something on select
+            },
+            createData: (value) => ({
+                name: value
+            })
         });
     }
 
@@ -859,10 +896,37 @@ class QueueProcessor {
                 </div>
             `;
 
-            const modalContainer = document.createElement('div');
-            modalContainer.id = 'modalContainer';
-            modalContainer.innerHTML = modalHtml;
-            document.body.appendChild(modalContainer);
+        const modalContainer = document.createElement('div');
+        modalContainer.id = 'modalContainer';
+        modalContainer.innerHTML = modalHtml;
+        document.body.appendChild(modalContainer);
+
+        // Setup periodic expense toggle for rules
+        const saveIsPeriodic = document.getElementById('saveIsPeriodic');
+        if (saveIsPeriodic) {
+            saveIsPeriodic.addEventListener('change', (e) => {
+                const periodicGroup = document.getElementById('savePeriodicExpenseGroup');
+                periodicGroup.style.display = e.target.checked ? 'block' : 'none';
+                if (!e.target.checked) {
+                    document.getElementById('savePeriodicExpenseName').value = '';
+                }
+            });
+        }
+
+        // Initialize autocomplete for save periodic expense
+        const savePeriodicInput = document.getElementById('savePeriodicExpenseName');
+        if (savePeriodicInput) {
+            new Autocomplete(savePeriodicInput, {
+                endpoint: '/api/periodic-expenses',
+                displayField: 'name',
+                onSelect: (periodic) => {
+                    // Optional: do something on select
+                },
+                createData: (value) => ({
+                    name: value
+                })
+            });
+        }
 
         } catch (error) {
             console.error('Error loading rules:', error);
@@ -908,6 +972,7 @@ class QueueProcessor {
                 <div><strong>Category ID:</strong> ${saveData.category_id}</div>
                 ${saveData.description ? `<div><strong>Description:</strong> ${saveData.description}</div>` : ''}
                 ${saveData.tags && saveData.tags.length > 0 ? `<div><strong>Tags:</strong> ${saveData.tags.join(', ')}</div>` : ''}
+                ${saveData.periodic_expense_name ? `<div><strong>Periodic Expense:</strong> ${saveData.periodic_expense_name}</div>` : ''}
             </div>
         `;
     }
@@ -1019,30 +1084,45 @@ class QueueProcessor {
                                 </select>
                             </div>
 
-                            <div id="saveFields" style="display: none;">
-                                <div class="form-group">
-                                    <label for="saveMerchant">Merchant Name</label>
-                                    <input type="text" id="saveMerchant" placeholder="Merchant alias for saved expenses">
-                                </div>
+                             <div id="saveFields" style="display: none;">
+                                 <div class="form-group">
+                                     <label for="saveMerchant">Merchant Name</label>
+                                     <input type="text" id="saveMerchant" placeholder="Merchant alias for saved expenses">
+                                 </div>
 
-                                <div class="form-group">
-                                    <label for="saveCategory">Category</label>
-                                    <select id="saveCategory">
-                                        <option value="">Select category</option>
-                                        ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
-                                    </select>
-                                </div>
+                                 <div class="form-group">
+                                     <label for="saveCategory">Category</label>
+                                     <select id="saveCategory">
+                                         <option value="">Select category</option>
+                                         ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                                     </select>
+                                 </div>
 
-                                <div class="form-group">
-                                    <label for="saveDescription">Description (optional)</label>
-                                    <input type="text" id="saveDescription" placeholder="Description for saved expenses">
-                                </div>
+                                 <div class="form-group">
+                                     <label for="saveDescription">Description (optional)</label>
+                                     <input type="text" id="saveDescription" placeholder="Description for saved expenses">
+                                 </div>
 
-                                <div class="form-group">
-                                    <label for="saveTags">Tags (optional)</label>
-                                    <input type="text" id="saveTags" placeholder="Comma-separated tags">
-                                </div>
-                            </div>
+                                 <div class="form-group">
+                                     <label for="saveTags">Tags (optional)</label>
+                                     <input type="text" id="saveTags" placeholder="Comma-separated tags">
+                                 </div>
+
+                                 <div class="form-group">
+                                     <label class="switch-label">
+                                         Periodic expense
+                                         <label class="switch">
+                                             <input type="checkbox" id="saveIsPeriodic">
+                                             <span class="slider"></span>
+                                         </label>
+                                     </label>
+                                 </div>
+
+                                 <div class="form-group" id="savePeriodicExpenseGroup" style="display: none;">
+                                     <label for="savePeriodicExpenseName">Periodic Expense Name</label>
+                                     <input type="text" id="savePeriodicExpenseName" placeholder="Start typing to see suggestions..." autocomplete="off">
+                                 </div>
+                             </div>
                         </form>
                     </div>
 
@@ -1109,7 +1189,8 @@ class QueueProcessor {
                 merchant_name: document.getElementById('saveMerchant').value,
                 category_id: parseInt(document.getElementById('saveCategory').value),
                 description: document.getElementById('saveDescription').value,
-                tags: tags
+                tags: tags,
+                periodic_expense_name: document.getElementById('saveIsPeriodic').checked ? document.getElementById('savePeriodicExpenseName').value : null
             };
         }
 
@@ -1139,6 +1220,7 @@ class QueueProcessor {
         const merchantName = document.getElementById('bulkMerchantName').value;
         const categoryId = parseInt(document.getElementById('bulkCategorySelect').value);
         const description = document.getElementById('bulkDescription').value;
+        const periodicExpenseName = document.getElementById('bulkIsPeriodic').checked ? document.getElementById('bulkPeriodicExpenseName').value : null;
         
         if (!merchantName || !categoryId) {
             alert('Please fill in merchant name and category');
@@ -1161,7 +1243,8 @@ class QueueProcessor {
                 merchant_name: merchantName,
                 category_id: categoryId,
                 description: description,
-                tags: this.bulkTags
+                tags: this.bulkTags,
+                periodic_expense_name: periodicExpenseName
             };
 
             try {
@@ -1296,6 +1379,21 @@ class QueueProcessor {
                     </div>
                 </div>
 
+                <div class="form-group">
+                    <label class="switch-label">
+                        Periodic expense
+                        <label class="switch">
+                            <input type="checkbox" id="isPeriodic">
+                            <span class="slider"></span>
+                        </label>
+                    </label>
+                </div>
+
+                <div class="form-group" id="periodicExpenseGroup" style="display: none;">
+                    <label for="periodicExpenseName">Periodic Expense Name</label>
+                    <input type="text" id="periodicExpenseName" placeholder="Start typing to see suggestions..." autocomplete="off">
+                </div>
+
                 <div class="btn-group">
                     <button type="button" class="btn btn-danger" onclick="queueProcessor.discardItem()">
                         Discard <kbd>X</kbd>
@@ -1369,6 +1467,28 @@ class QueueProcessor {
                 }
             }
         });
+
+        // Periodic expense checkbox toggle
+        document.getElementById('isPeriodic').addEventListener('change', (e) => {
+            const periodicGroup = document.getElementById('periodicExpenseGroup');
+            periodicGroup.style.display = e.target.checked ? 'block' : 'none';
+            if (!e.target.checked) {
+                document.getElementById('periodicExpenseName').value = '';
+            }
+        });
+
+        // Initialize autocomplete for periodic expense
+        const periodicInput = document.getElementById('periodicExpenseName');
+        new Autocomplete(periodicInput, {
+            endpoint: '/api/periodic-expenses',
+            displayField: 'name',
+            onSelect: (periodic) => {
+                // Optional: do something on select
+            },
+            createData: (value) => ({
+                name: value
+            })
+        });
     }
 
     addTag(tagName) {
@@ -1419,7 +1539,8 @@ class QueueProcessor {
             merchant_name: document.getElementById('merchantName').value,
             category_id: parseInt(document.getElementById('categorySelect').value),
             description: document.getElementById('description').value,
-            tags: this.currentTags
+            tags: this.currentTags,
+            periodic_expense_name: document.getElementById('isPeriodic').checked ? document.getElementById('periodicExpenseName').value : null
         };
 
         try {

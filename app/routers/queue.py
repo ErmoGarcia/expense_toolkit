@@ -6,6 +6,7 @@ from ..models.expense import RawExpense, Expense
 from ..models.merchant import MerchantAlias
 from ..models.category import Category
 from ..models.tag import Tag, ExpenseTag
+from ..models.periodic_expense import PeriodicExpense
 from ..models.rule import Rule
 
 router = APIRouter()
@@ -54,6 +55,7 @@ async def process_raw_expense(data: dict, db: Session = Depends(get_db)):
     category_id = data.get("category_id")
     description = data.get("description", "")
     tag_names = data.get("tags", [])
+    periodic_expense_name = data.get("periodic_expense_name")
     
     # Get raw expense
     raw_expense = db.query(RawExpense).filter(RawExpense.id == raw_expense_id).first()
@@ -72,7 +74,7 @@ async def process_raw_expense(data: dict, db: Session = Depends(get_db)):
         merchant_alias = db.query(MerchantAlias).filter(
             MerchantAlias.display_name == merchant_name
         ).first()
-        
+
         if not merchant_alias:
             # Create new merchant alias
             merchant_alias = MerchantAlias(
@@ -81,6 +83,20 @@ async def process_raw_expense(data: dict, db: Session = Depends(get_db)):
                 default_category_id=category_id
             )
             db.add(merchant_alias)
+            db.flush()  # Get the ID
+
+    # Handle periodic expense
+    periodic_expense = None
+    if periodic_expense_name:
+        # Try to find existing periodic expense
+        periodic_expense = db.query(PeriodicExpense).filter(
+            PeriodicExpense.name == periodic_expense_name
+        ).first()
+
+        if not periodic_expense:
+            # Create new periodic expense
+            periodic_expense = PeriodicExpense(name=periodic_expense_name)
+            db.add(periodic_expense)
             db.flush()  # Get the ID
     
     # Create the expense
@@ -92,7 +108,8 @@ async def process_raw_expense(data: dict, db: Session = Depends(get_db)):
         currency=raw_expense.currency,
         merchant_alias_id=merchant_alias.id if merchant_alias else None,
         category_id=category_id,
-        description=description
+        description=description,
+        periodic_expense_id=periodic_expense.id if periodic_expense else None
     )
     
     db.add(expense)
@@ -160,6 +177,7 @@ async def apply_rules(db: Session = Depends(get_db)):
                     category_id = save_data["category_id"]
                     description = save_data.get("description", "")
                     tag_names = save_data.get("tags", [])
+                    periodic_expense_name = save_data.get("periodic_expense_name")
 
                     # Handle merchant alias
                     merchant_alias = None
@@ -177,6 +195,18 @@ async def apply_rules(db: Session = Depends(get_db)):
                             db.add(merchant_alias)
                             db.flush()
 
+                    # Handle periodic expense
+                    periodic_expense = None
+                    if periodic_expense_name:
+                        periodic_expense = db.query(PeriodicExpense).filter(
+                            PeriodicExpense.name == periodic_expense_name
+                        ).first()
+
+                        if not periodic_expense:
+                            periodic_expense = PeriodicExpense(name=periodic_expense_name)
+                            db.add(periodic_expense)
+                            db.flush()
+
                     # Create the expense
                     expense = Expense(
                         raw_expense_id=raw_expense.id,
@@ -186,7 +216,8 @@ async def apply_rules(db: Session = Depends(get_db)):
                         currency=raw_expense.currency,
                         merchant_alias_id=merchant_alias.id if merchant_alias else None,
                         category_id=category_id,
-                        description=description
+                        description=description,
+                        periodic_expense_id=periodic_expense.id if periodic_expense else None
                     )
 
                     db.add(expense)
