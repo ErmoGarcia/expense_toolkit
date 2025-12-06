@@ -152,22 +152,29 @@ class ExpenseManager {
                         <th>Category</th>
                         <th>Amount</th>
                         <th>Tags</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     ${expenses.map(expense => `
                         <tr>
                             <td>${this.formatDate(expense.transaction_date)}</td>
-                            <td>${expense.merchant_alias?.display_name || 'Unknown'}</td>
+                            <td>
+                                ${expense.merchant_alias?.display_name || 'Unknown'}
+                                ${expense.is_group ? `<span class="expense-group-indicator" title="Grouped expense - Click to view details" onclick="expenseManager.showGroupDetails(${expense.id})">📦</span>` : ''}
+                            </td>
                             <td>${expense.description || ''}</td>
                             <td>${expense.category?.name || ''}</td>
                             <td class="expense-amount ${parseFloat(expense.amount) < 0 ? 'negative' : 'positive'}">
                                 £${Math.abs(parseFloat(expense.amount)).toFixed(2)}
                             </td>
                             <td>
-                                ${(expense.tags || []).map(tag => 
+                                ${(expense.tags || []).map(tag =>
                                     `<span class="expense-tag">#${tag.name}</span>`
                                 ).join('')}
+                            </td>
+                            <td class="expense-indicator">
+                                ${expense.periodic_expense ? '<span class="periodic-icon" title="Periodic">↻</span>' : ''}
                             </td>
                         </tr>
                     `).join('')}
@@ -217,9 +224,163 @@ class ExpenseManager {
     formatDate(dateString) {
         return new Date(dateString + 'T00:00:00').toLocaleDateString('en-GB');
     }
+
+    async showGroupDetails(expenseId) {
+        try {
+            const response = await fetch(`/api/expenses/${expenseId}`);
+            if (!response.ok) {
+                throw new Error('Failed to load expense details');
+            }
+            
+            const expense = await response.json();
+            
+            if (!expense.child_expenses || expense.child_expenses.length === 0) {
+                alert('No child expenses found for this group.');
+                return;
+            }
+            
+            this.renderGroupModal(expense);
+        } catch (error) {
+            console.error('Error loading group details:', error);
+            alert('Error loading group details: ' + error.message);
+        }
+    }
+
+    renderGroupModal(expense) {
+        const childExpenses = expense.child_expenses || [];
+        const totalAmount = parseFloat(expense.amount);
+        
+        const modalHtml = `
+            <div class="modal-overlay" id="groupDetailsModal" onclick="expenseManager.handleModalClick(event)">
+                <div class="modal-content large-modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Grouped Expense Details</h2>
+                        <button class="modal-close" onclick="expenseManager.closeGroupModal()">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="group-parent-info">
+                            <h3>Parent Expense</h3>
+                            <div class="group-parent-details">
+                                <div class="detail-row">
+                                    <span class="detail-label">Date:</span>
+                                    <span class="detail-value">${this.formatDate(expense.transaction_date)}</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Merchant:</span>
+                                    <span class="detail-value">${expense.merchant_alias?.display_name || 'Unknown'}</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Category:</span>
+                                    <span class="detail-value">${expense.category?.name || 'Uncategorized'}</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Total Amount:</span>
+                                    <span class="detail-value ${totalAmount < 0 ? 'negative' : 'positive'}">
+                                        ${totalAmount < 0 ? '-' : ''}£${Math.abs(totalAmount).toFixed(2)}
+                                    </span>
+                                </div>
+                                ${expense.description ? `
+                                <div class="detail-row">
+                                    <span class="detail-label">Description:</span>
+                                    <span class="detail-value">${expense.description}</span>
+                                </div>
+                                ` : ''}
+                                ${expense.tags && expense.tags.length > 0 ? `
+                                <div class="detail-row">
+                                    <span class="detail-label">Tags:</span>
+                                    <span class="detail-value">
+                                        ${expense.tags.map(tag => `<span class="expense-tag">#${tag.name}</span>`).join(' ')}
+                                    </span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        
+                        <div class="group-children-section">
+                            <h3>Child Expenses (${childExpenses.length})</h3>
+                            <div class="group-children-table">
+                                <table class="expenses-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Merchant</th>
+                                            <th>Description</th>
+                                            <th>Category</th>
+                                            <th>Amount</th>
+                                            <th>Tags</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${childExpenses.map(child => `
+                                            <tr>
+                                                <td>${this.formatDate(child.transaction_date)}</td>
+                                                <td>${child.merchant_alias?.display_name || 'Unknown'}</td>
+                                                <td>${child.description || ''}</td>
+                                                <td>${child.category?.name || ''}</td>
+                                                <td class="expense-amount ${parseFloat(child.amount) < 0 ? 'negative' : 'positive'}">
+                                                    ${parseFloat(child.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(child.amount)).toFixed(2)}
+                                                </td>
+                                                <td>
+                                                    ${(child.tags || []).map(tag => 
+                                                        `<span class="expense-tag">#${tag.name}</span>`
+                                                    ).join('')}
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="expenseManager.closeGroupModal()">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove any existing modal
+        this.closeGroupModal();
+        
+        // Add modal to body
+        const modalContainer = document.createElement('div');
+        modalContainer.id = 'groupModalContainer';
+        modalContainer.innerHTML = modalHtml;
+        document.body.appendChild(modalContainer);
+        
+        // Add keyboard listener for Escape
+        document.addEventListener('keydown', this.handleModalKeydown);
+    }
+
+    handleModalClick(event) {
+        if (event.target.id === 'groupDetailsModal') {
+            this.closeGroupModal();
+        }
+    }
+
+    handleModalKeydown = (event) => {
+        if (event.key === 'Escape') {
+            this.closeGroupModal();
+        }
+    }
+
+    closeGroupModal() {
+        const modalContainer = document.getElementById('groupModalContainer');
+        if (modalContainer) {
+            modalContainer.remove();
+        }
+        document.removeEventListener('keydown', this.handleModalKeydown);
+    }
 }
+
+// Global instance for onclick handlers
+let expenseManager;
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new ExpenseManager();
+    expenseManager = new ExpenseManager();
 });

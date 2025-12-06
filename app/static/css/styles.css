@@ -1056,6 +1056,23 @@ input:checked+.slider:before {
     margin-bottom: 0.5rem;
 }
 
+/* Periodic Expense Indicator */
+.expense-indicator {
+    text-align: center;
+    width: 30px;
+}
+
+.periodic-icon {
+    color: #17a2b8;
+    font-size: 24px;
+    cursor: help;
+    opacity: 0.7;
+}
+
+.periodic-icon:hover {
+    opacity: 1;
+}
+
 /* Tools Modal */
 .tools-options {
     display: flex;
@@ -1080,4 +1097,269 @@ input:checked+.slider:before {
 .large-modal .modal-content {
     max-width: 800px;
     width: 90vw;
+}
+
+/* Info Button */
+.btn-info {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.btn-info:hover {
+    background-color: #138496;
+}
+
+/* Group Expense Modal */
+.group-summary {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+
+.group-summary-item {
+    font-size: 1rem;
+}
+
+.group-summary-item .negative {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.group-summary-item .positive {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.group-section {
+    margin-bottom: 2rem;
+}
+
+.group-section h3 {
+    margin-bottom: 0.5rem;
+    color: #333;
+    font-size: 1.1rem;
+}
+
+.section-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.group-children-list {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.group-child-row {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.group-child-row:last-child {
+    border-bottom: none;
+}
+
+.group-child-row:hover {
+    background-color: #f8f9fa;
+}
+
+.group-child-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+    min-width: 250px;
+}
+
+.group-child-date {
+    color: #6c757d;
+    font-size: 0.9rem;
+    min-width: 80px;
+}
+
+.group-child-merchant {
+    flex: 1;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.group-child-amount {
+    font-weight: 600;
+    min-width: 80px;
+    text-align: right;
+}
+
+.group-child-amount.negative {
+    color: #dc3545;
+}
+
+.group-child-amount.positive {
+    color: #28a745;
+}
+
+.group-child-custom {
+    flex: 1;
+    min-width: 150px;
+}
+
+.custom-indicator {
+    font-size: 0.85rem;
+    color: #17a2b8;
+    font-style: italic;
+}
+
+/* Child Edit Modal */
+.child-modal-overlay {
+    z-index: 1100;
+}
+
+.child-expense-info {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    display: grid;
+    gap: 0.5rem;
+}
+
+.child-expense-info .negative {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.child-expense-info .positive {
+    color: #28a745;
+    font-weight: 600;
+}
+
+/* Expense Group Indicator (for expenses list) */
+.expense-group-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: #17a2b8;
+    font-size: 0.85rem;
+}
+
+/* Responsive group modal */
+@media (max-width: 768px) {
+    .group-summary {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .group-child-info {
+        min-width: 100%;
+    }
+
+    .group-child-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .group-child-custom {
+        width: 100%;
+    }
+}
+
+/* Clickable Group Indicator */
+.expense-group-indicator {
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.2s;
+    font-size: 1.2rem;
+    display: inline-block;
+    margin-left: 0.25rem;
+}
+
+.expense-group-indicator:hover {
+    opacity: 0.7;
+}
+
+/* Group Details Modal */
+.group-parent-info {
+    margin-bottom: 2rem;
+}
+
+.group-parent-info h3,
+.group-children-section h3 {
+    margin-bottom: 1rem;
+    color: #333;
+    font-size: 1.1rem;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 0.5rem;
+}
+
+.group-parent-details {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.detail-row {
+    display: flex;
+    margin-bottom: 0.5rem;
+}
+
+.detail-row:last-child {
+    margin-bottom: 0;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: #495057;
+    min-width: 120px;
+}
+
+.detail-value {
+    flex: 1;
+}
+
+.detail-value.negative {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.detail-value.positive {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.group-children-section {
+    margin-top: 1.5rem;
+}
+
+.group-children-table {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+}
+
+.group-children-table .expenses-table {
+    margin: 0;
+}
+
+.group-children-table .expenses-table th,
+.group-children-table .expenses-table td {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+}
+
+/* Large modal for group details */
+.large-modal {
+    max-width: 900px;
+    width: 95vw;
 }

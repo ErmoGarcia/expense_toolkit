@@ -42,6 +42,7 @@ class Expense(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     periodic_expense_id = Column(Integer, ForeignKey("periodic_expenses.id"), nullable=True)
+    parent_expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)  # For grouped expenses
     is_recurring = Column(Boolean, default=False)
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -54,3 +55,7 @@ class Expense(Base):
     category = relationship("Category")
     periodic_expense = relationship("PeriodicExpense")
     tags = relationship("Tag", secondary="expense_tags")
+    # Self-referential relationship for grouped expenses
+    # parent_expense points to the parent (many-to-one)
+    # child_expenses gets all children of this expense (one-to-many)
+    parent_expense = relationship("Expense", remote_side=[id], foreign_keys=[parent_expense_id], backref="child_expenses")

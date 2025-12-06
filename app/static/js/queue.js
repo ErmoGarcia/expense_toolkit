@@ -202,8 +202,11 @@ class QueueProcessor {
         this.categories = [];
         this.tags = [];
         this.currentTags = [];
-        this.viewMode = 'list'; // 'list', 'detail', or 'bulk'
+        this.viewMode = 'list'; // 'list', 'detail', 'bulk', or 'group'
         this.bulkTags = [];
+        this.groupTags = [];
+        this.groupChildrenData = {};
+        this.currentEditingChildId = null;
         this.merchantAutocomplete = null;
         this.bulkMerchantAutocomplete = null;
         this.init();
@@ -260,6 +263,8 @@ class QueueProcessor {
                 this.handleDetailKeyboard(e);
             } else if (this.viewMode === 'bulk') {
                 this.handleBulkKeyboard(e);
+            } else if (this.viewMode === 'group') {
+                this.handleGroupModalKeyboard(e);
             }
         });
     }
@@ -313,6 +318,9 @@ class QueueProcessor {
         } else if (e.key === 's' && this.selectedIds.size > 0) {
             e.preventDefault();
             this.openBulkSaveModal();
+        } else if (e.key === 'g' && this.selectedIds.size > 1) {
+            e.preventDefault();
+            this.openGroupModal();
         } else if (e.key === 't') {
             e.preventDefault();
             this.openToolsModal();
@@ -484,6 +492,9 @@ class QueueProcessor {
                     <button class="btn btn-primary btn-small" onclick="queueProcessor.openBulkSaveModal()">
                         Save Selected <kbd>S</kbd>
                     </button>
+                    <button class="btn btn-info btn-small" onclick="queueProcessor.openGroupModal()">
+                        Group Selected <kbd>G</kbd>
+                    </button>
                     <button class="btn btn-secondary btn-small" onclick="queueProcessor.clearSelection()">
                         Clear Selection <kbd>Esc</kbd>
                     </button>
@@ -493,6 +504,7 @@ class QueueProcessor {
                     <span class="keyboard-hint">Enter Open</span>
                     <span class="keyboard-hint">Space Select</span>
                     <span class="keyboard-hint">Shift+↑↓ Multi-select</span>
+                    <span class="keyboard-hint">G Group</span>
                 </div>
             </div>
         `;
@@ -781,6 +793,8 @@ class QueueProcessor {
             this.closeRulesModal();
         } else if (event.target.id === 'createRuleModal') {
             this.closeCreateRuleModal();
+        } else if (event.target.id === 'groupModal') {
+            this.closeGroupModal();
         }
     }
 
@@ -1640,6 +1654,539 @@ class QueueProcessor {
 
     formatDate(dateString) {
         return new Date(dateString + 'T00:00:00').toLocaleDateString('en-GB');
+    }
+
+    // ==================== GROUP EXPENSE FUNCTIONALITY ====================
+
+    openGroupModal() {
+        if (this.selectedIds.size < 2) {
+            alert('Please select at least 2 expenses to group');
+            return;
+        }
+
+        this.viewMode = 'group';
+        this.groupTags = [];
+        this.groupChildrenData = {};
+
+        const selectedItems = this.queueItems.filter(item => this.selectedIds.has(item.id));
+        const totalAmount = selectedItems.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+        const earliestDate = selectedItems.reduce((earliest, item) => {
+            const date = new Date(item.transaction_date);
+            return !earliest || date < earliest ? date : earliest;
+        }, null);
+
+        // Initialize children data
+        selectedItems.forEach(item => {
+            this.groupChildrenData[item.id] = {
+                raw_expense_id: item.id,
+                merchant_name: '',
+                category_id: null,
+                description: '',
+                tags: []
+            };
+        });
+
+        const modalHtml = `
+            <div class="modal-overlay" id="groupModal" onclick="queueProcessor.handleModalClick(event)">
+                <div class="modal-content large-modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Group ${this.selectedIds.size} Expenses</h2>
+                        <button class="modal-close" onclick="queueProcessor.closeGroupModal()">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="group-summary">
+                            <div class="group-summary-item">
+                                <strong>Items:</strong> ${this.selectedIds.size}
+                            </div>
+                            <div class="group-summary-item">
+                                <strong>Total Amount:</strong> 
+                                <span class="${totalAmount < 0 ? 'negative' : 'positive'}">
+                                    ${totalAmount < 0 ? '-' : ''}£${Math.abs(totalAmount).toFixed(2)}
+                                </span>
+                            </div>
+                            <div class="group-summary-item">
+                                <strong>Date (earliest):</strong> ${this.formatDate(earliestDate.toISOString().split('T')[0])}
+                            </div>
+                        </div>
+
+                        <div class="group-section">
+                            <h3>Parent Expense Details</h3>
+                            <p class="section-description">These details apply to the grouped expense shown in your expenses list.</p>
+                            
+                            <form id="groupParentForm">
+                                <div class="form-group">
+                                    <label for="groupMerchantName">Merchant Alias</label>
+                                    <input type="text" id="groupMerchantName" placeholder="Start typing to see suggestions..." required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="groupCategorySelect">Category</label>
+                                    <select id="groupCategorySelect" required>
+                                        <option value="">Select a category</option>
+                                        ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="groupDescription">Description (optional)</label>
+                                    <input type="text" id="groupDescription" placeholder="Add a description for the grouped expense">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="groupTagInput">Tags</label>
+                                    <input type="text" id="groupTagInput" placeholder="Start typing to see existing tags..." autocomplete="off">
+                                    <div class="tags-input" id="groupTagsContainer">
+                                        <!-- Tags will be added here -->
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="switch-label">
+                                        Periodic expense
+                                        <label class="switch">
+                                            <input type="checkbox" id="groupIsPeriodic">
+                                            <span class="slider"></span>
+                                        </label>
+                                    </label>
+                                </div>
+
+                                <div class="form-group" id="groupPeriodicExpenseGroup" style="display: none;">
+                                    <label for="groupPeriodicExpenseName">Periodic Expense Name</label>
+                                    <input type="text" id="groupPeriodicExpenseName" placeholder="Start typing to see suggestions..." autocomplete="off">
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="group-section">
+                            <h3>Child Expenses</h3>
+                            <p class="section-description">Individual expenses that make up this group. Click Edit to customize each one.</p>
+                            
+                            <div class="group-children-list" id="groupChildrenList">
+                                ${selectedItems.map(item => `
+                                    <div class="group-child-row" data-id="${item.id}">
+                                        <div class="group-child-info">
+                                            <span class="group-child-date">${this.formatDate(item.transaction_date)}</span>
+                                            <span class="group-child-merchant">${item.raw_merchant_name || 'Unknown'}</span>
+                                            <span class="group-child-amount ${parseFloat(item.amount) < 0 ? 'negative' : 'positive'}">
+                                                ${parseFloat(item.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(item.amount)).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div class="group-child-custom" id="childCustom_${item.id}">
+                                            <!-- Custom settings will appear here -->
+                                        </div>
+                                        <button type="button" class="btn btn-small btn-secondary" onclick="queueProcessor.openChildEditModal(${item.id})">
+                                            Edit
+                                        </button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeGroupModal()">
+                            Cancel <kbd>Esc</kbd>
+                        </button>
+                        <button type="button" class="btn btn-primary" onclick="queueProcessor.saveGroupedExpense()">
+                            Save Group
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const modalContainer = document.createElement('div');
+        modalContainer.id = 'modalContainer';
+        modalContainer.innerHTML = modalHtml;
+        document.body.appendChild(modalContainer);
+
+        this.setupGroupFormEvents();
+        document.getElementById('groupMerchantName').focus();
+    }
+
+    setupGroupFormEvents() {
+        // Initialize autocomplete for group merchant
+        const groupMerchantInput = document.getElementById('groupMerchantName');
+        new Autocomplete(groupMerchantInput, {
+            endpoint: '/api/merchants',
+            displayField: 'display_name',
+            onSelect: (merchant) => {
+                if (merchant.default_category_id) {
+                    document.getElementById('groupCategorySelect').value = merchant.default_category_id;
+                }
+            },
+            createData: (value) => ({
+                raw_name: value,
+                display_name: value
+            })
+        });
+
+        // Initialize autocomplete for group tags
+        const groupTagInput = document.getElementById('groupTagInput');
+        new Autocomplete(groupTagInput, {
+            endpoint: '/api/tags',
+            displayField: 'name',
+            onSelect: (tag) => {
+                this.addGroupTag(tag.name);
+                groupTagInput.value = '';
+            },
+            onCreate: (tag) => {
+                this.addGroupTag(tag.name);
+                groupTagInput.value = '';
+            },
+            createData: (value) => ({ name: value })
+        });
+
+        groupTagInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = groupTagInput.value.trim();
+                if (value) {
+                    this.addGroupTag(value);
+                    groupTagInput.value = '';
+                }
+            }
+        });
+
+        // Periodic expense toggle
+        document.getElementById('groupIsPeriodic').addEventListener('change', (e) => {
+            const periodicGroup = document.getElementById('groupPeriodicExpenseGroup');
+            periodicGroup.style.display = e.target.checked ? 'block' : 'none';
+            if (!e.target.checked) {
+                document.getElementById('groupPeriodicExpenseName').value = '';
+            }
+        });
+
+        // Initialize autocomplete for periodic expense
+        const periodicInput = document.getElementById('groupPeriodicExpenseName');
+        new Autocomplete(periodicInput, {
+            endpoint: '/api/periodic-expenses',
+            displayField: 'name',
+            onSelect: (periodic) => {},
+            createData: (value) => ({ name: value })
+        });
+    }
+
+    addGroupTag(tagName) {
+        if (!tagName || this.groupTags.includes(tagName)) return;
+        this.groupTags.push(tagName);
+        this.renderGroupTags();
+    }
+
+    removeGroupTag(tagName) {
+        this.groupTags = this.groupTags.filter(tag => tag !== tagName);
+        this.renderGroupTags();
+    }
+
+    renderGroupTags() {
+        const container = document.getElementById('groupTagsContainer');
+        container.innerHTML = this.groupTags.map(tag => `
+            <div class="tag-item">
+                #${tag}
+                <button type="button" class="tag-remove" onclick="queueProcessor.removeGroupTag('${tag}')">×</button>
+            </div>
+        `).join('');
+    }
+
+    openChildEditModal(rawExpenseId) {
+        const item = this.queueItems.find(i => i.id === rawExpenseId);
+        if (!item) return;
+
+        const childData = this.groupChildrenData[rawExpenseId] || {};
+
+        const modalHtml = `
+            <div class="modal-overlay child-modal-overlay" id="childEditModal" onclick="queueProcessor.handleChildModalClick(event)">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Edit Child Expense</h2>
+                        <button class="modal-close" onclick="queueProcessor.closeChildEditModal()">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="child-expense-info">
+                            <div><strong>Date:</strong> ${this.formatDate(item.transaction_date)}</div>
+                            <div><strong>Original Merchant:</strong> ${item.raw_merchant_name || 'Unknown'}</div>
+                            <div><strong>Amount:</strong> <span class="${parseFloat(item.amount) < 0 ? 'negative' : 'positive'}">${parseFloat(item.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(item.amount)).toFixed(2)}</span></div>
+                        </div>
+
+                        <form id="childEditForm">
+                            <div class="form-group">
+                                <label for="childMerchantName">Merchant Alias (leave empty to use parent's)</label>
+                                <input type="text" id="childMerchantName" placeholder="Start typing to see suggestions..." value="${childData.merchant_name || ''}">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="childCategorySelect">Category (leave empty to use parent's)</label>
+                                <select id="childCategorySelect">
+                                    <option value="">Use parent's category</option>
+                                    ${this.categories.map(cat => `<option value="${cat.id}" ${childData.category_id == cat.id ? 'selected' : ''}>${cat.name}</option>`).join('')}
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="childDescription">Description</label>
+                                <input type="text" id="childDescription" placeholder="Add a description" value="${childData.description || ''}">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="childTagInput">Tags</label>
+                                <input type="text" id="childTagInput" placeholder="Start typing to see existing tags..." autocomplete="off">
+                                <div class="tags-input" id="childTagsContainer">
+                                    ${(childData.tags || []).map(tag => `
+                                        <div class="tag-item">
+                                            #${tag}
+                                            <button type="button" class="tag-remove" onclick="queueProcessor.removeChildTag(${rawExpenseId}, '${tag}')">×</button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeChildEditModal()">
+                            Cancel
+                        </button>
+                        <button type="button" class="btn btn-primary" onclick="queueProcessor.saveChildEdit(${rawExpenseId})">
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const childModalContainer = document.createElement('div');
+        childModalContainer.id = 'childModalContainer';
+        childModalContainer.innerHTML = modalHtml;
+        document.body.appendChild(childModalContainer);
+
+        this.currentEditingChildId = rawExpenseId;
+        this.setupChildEditFormEvents(rawExpenseId);
+        document.getElementById('childMerchantName').focus();
+    }
+
+    setupChildEditFormEvents(rawExpenseId) {
+        // Initialize autocomplete for child merchant
+        const childMerchantInput = document.getElementById('childMerchantName');
+        new Autocomplete(childMerchantInput, {
+            endpoint: '/api/merchants',
+            displayField: 'display_name',
+            onSelect: (merchant) => {
+                if (merchant.default_category_id) {
+                    document.getElementById('childCategorySelect').value = merchant.default_category_id;
+                }
+            },
+            createData: (value) => ({
+                raw_name: value,
+                display_name: value
+            })
+        });
+
+        // Initialize autocomplete for child tags
+        const childTagInput = document.getElementById('childTagInput');
+        new Autocomplete(childTagInput, {
+            endpoint: '/api/tags',
+            displayField: 'name',
+            onSelect: (tag) => {
+                this.addChildTag(rawExpenseId, tag.name);
+                childTagInput.value = '';
+            },
+            onCreate: (tag) => {
+                this.addChildTag(rawExpenseId, tag.name);
+                childTagInput.value = '';
+            },
+            createData: (value) => ({ name: value })
+        });
+
+        childTagInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = childTagInput.value.trim();
+                if (value) {
+                    this.addChildTag(rawExpenseId, value);
+                    childTagInput.value = '';
+                }
+            }
+        });
+    }
+
+    addChildTag(rawExpenseId, tagName) {
+        if (!this.groupChildrenData[rawExpenseId]) {
+            this.groupChildrenData[rawExpenseId] = { tags: [] };
+        }
+        if (!this.groupChildrenData[rawExpenseId].tags) {
+            this.groupChildrenData[rawExpenseId].tags = [];
+        }
+        if (!this.groupChildrenData[rawExpenseId].tags.includes(tagName)) {
+            this.groupChildrenData[rawExpenseId].tags.push(tagName);
+            this.renderChildTags(rawExpenseId);
+        }
+    }
+
+    removeChildTag(rawExpenseId, tagName) {
+        if (this.groupChildrenData[rawExpenseId]?.tags) {
+            this.groupChildrenData[rawExpenseId].tags = this.groupChildrenData[rawExpenseId].tags.filter(t => t !== tagName);
+            this.renderChildTags(rawExpenseId);
+        }
+    }
+
+    renderChildTags(rawExpenseId) {
+        const container = document.getElementById('childTagsContainer');
+        if (!container) return;
+        const tags = this.groupChildrenData[rawExpenseId]?.tags || [];
+        container.innerHTML = tags.map(tag => `
+            <div class="tag-item">
+                #${tag}
+                <button type="button" class="tag-remove" onclick="queueProcessor.removeChildTag(${rawExpenseId}, '${tag}')">×</button>
+            </div>
+        `).join('');
+    }
+
+    saveChildEdit(rawExpenseId) {
+        const merchantName = document.getElementById('childMerchantName').value.trim();
+        const categoryId = document.getElementById('childCategorySelect').value;
+        const description = document.getElementById('childDescription').value.trim();
+
+        this.groupChildrenData[rawExpenseId] = {
+            raw_expense_id: rawExpenseId,
+            merchant_name: merchantName,
+            category_id: categoryId ? parseInt(categoryId) : null,
+            description: description,
+            tags: this.groupChildrenData[rawExpenseId]?.tags || []
+        };
+
+        // Update the custom indicator in the main modal
+        const customEl = document.getElementById(`childCustom_${rawExpenseId}`);
+        if (customEl) {
+            const hasCustom = merchantName || categoryId || description || (this.groupChildrenData[rawExpenseId]?.tags?.length > 0);
+            if (hasCustom) {
+                const parts = [];
+                if (merchantName) parts.push(`Merchant: ${merchantName}`);
+                if (categoryId) {
+                    const cat = this.categories.find(c => c.id == categoryId);
+                    if (cat) parts.push(`Category: ${cat.name}`);
+                }
+                if (description) parts.push(`Desc: ${description.substring(0, 20)}${description.length > 20 ? '...' : ''}`);
+                if (this.groupChildrenData[rawExpenseId]?.tags?.length > 0) {
+                    parts.push(`Tags: ${this.groupChildrenData[rawExpenseId].tags.join(', ')}`);
+                }
+                customEl.innerHTML = `<span class="custom-indicator">${parts.join(' | ')}</span>`;
+            } else {
+                customEl.innerHTML = '';
+            }
+        }
+
+        this.closeChildEditModal();
+    }
+
+    handleChildModalClick(event) {
+        if (event.target.id === 'childEditModal') {
+            this.closeChildEditModal();
+        }
+    }
+
+    closeChildEditModal() {
+        const childModalContainer = document.getElementById('childModalContainer');
+        if (childModalContainer) {
+            childModalContainer.remove();
+        }
+        this.currentEditingChildId = null;
+    }
+
+    closeGroupModal() {
+        const modalContainer = document.getElementById('modalContainer');
+        if (modalContainer) {
+            modalContainer.remove();
+        }
+        this.viewMode = 'list';
+        this.groupTags = [];
+        this.groupChildrenData = {};
+    }
+
+    async saveGroupedExpense() {
+        const merchantName = document.getElementById('groupMerchantName').value.trim();
+        const categoryId = document.getElementById('groupCategorySelect').value;
+        const description = document.getElementById('groupDescription').value.trim();
+        const periodicExpenseName = document.getElementById('groupIsPeriodic').checked 
+            ? document.getElementById('groupPeriodicExpenseName').value.trim() 
+            : null;
+
+        if (!merchantName) {
+            alert('Please enter a merchant name for the grouped expense');
+            document.getElementById('groupMerchantName').focus();
+            return;
+        }
+
+        if (!categoryId) {
+            alert('Please select a category for the grouped expense');
+            document.getElementById('groupCategorySelect').focus();
+            return;
+        }
+
+        const rawExpenseIds = Array.from(this.selectedIds);
+        const childrenData = rawExpenseIds.map(id => this.groupChildrenData[id] || { raw_expense_id: id });
+
+        const payload = {
+            raw_expense_ids: rawExpenseIds,
+            parent: {
+                merchant_name: merchantName,
+                category_id: parseInt(categoryId),
+                description: description,
+                tags: this.groupTags,
+                periodic_expense_name: periodicExpenseName
+            },
+            children: childrenData
+        };
+
+        try {
+            const response = await fetch('/api/queue/group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to create expense group');
+            }
+
+            const result = await response.json();
+
+            // Remove processed items from queue
+            this.queueItems = this.queueItems.filter(item => !this.selectedIds.has(item.id));
+            this.selectedIds.clear();
+
+            // Adjust index if needed
+            if (this.selectedIndex >= this.queueItems.length && this.queueItems.length > 0) {
+                this.selectedIndex = this.queueItems.length - 1;
+            }
+
+            this.closeGroupModal();
+            await this.updateQueueCount();
+
+            if (this.queueItems.length === 0) {
+                this.renderEmptyQueue();
+            } else {
+                this.renderListView();
+            }
+
+            alert(`Expense group created successfully! Parent expense ID: ${result.parent_expense_id}`);
+        } catch (error) {
+            console.error('Error creating expense group:', error);
+            alert('Error creating expense group: ' + error.message);
+        }
+    }
+
+    handleGroupModalKeyboard(e) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            if (document.getElementById('childModalContainer')) {
+                this.closeChildEditModal();
+            } else {
+                this.closeGroupModal();
+            }
+        }
     }
 }
 
