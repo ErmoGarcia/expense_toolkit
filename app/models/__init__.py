@@ -5,15 +5,17 @@ from .merchant import MerchantAlias
 from .tag import Tag, ExpenseTag
 from .import_history import ImportHistory
 from .notification import RawNotification
+from .rule import Rule
 
 __all__ = [
     "BankAccount",
-    "Category", 
+    "Category",
     "Expense",
     "RawExpense",
     "MerchantAlias",
     "Tag",
     "ExpenseTag",
     "ImportHistory",
-    "RawNotification"
+    "RawNotification",
+    "Rule"
 ]

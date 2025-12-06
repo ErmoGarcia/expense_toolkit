@@ -27,10 +27,18 @@
     <!-- Main Content -->
     <main class="container">
         <section class="queue-container">
-            <div class="queue-header">
-                <h1>Processing Queue</h1>
-                <p id="queueStatus">Loading...</p>
-            </div>
+             <div class="queue-header">
+                 <h1>Processing Queue</h1>
+                 <div class="queue-actions">
+                     <button class="btn btn-secondary" id="toolsBtn" title="Tools (T)">
+                         Tools <kbd>T</kbd>
+                     </button>
+                     <button class="btn btn-secondary" id="rulesBtn" title="Rules (R)">
+                         Rules <kbd>R</kbd>
+                     </button>
+                 </div>
+                 <p id="queueStatus">Loading...</p>
+             </div>
 
             <div id="queueContent">
                 <!-- Content will be loaded here -->

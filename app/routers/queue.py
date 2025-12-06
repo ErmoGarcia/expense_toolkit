@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import re
 from ..database import get_db
 from ..models.expense import RawExpense, Expense
 from ..models.merchant import MerchantAlias
 from ..models.category import Category
 from ..models.tag import Tag, ExpenseTag
+from ..models.rule import Rule
 
 router = APIRouter()
 
@@ -119,7 +121,117 @@ async def discard_raw_expense(raw_expense_id: int, db: Session = Depends(get_db)
     raw_expense = db.query(RawExpense).filter(RawExpense.id == raw_expense_id).first()
     if not raw_expense:
         raise HTTPException(status_code=404, detail="Raw expense not found")
-    
+
     db.delete(raw_expense)
     db.commit()
     return {"message": "Raw expense discarded"}
+
+@router.post("/apply-rules")
+async def apply_rules(db: Session = Depends(get_db)):
+    """Apply all active rules to raw expenses in the queue"""
+    # Get all active rules
+    active_rules = db.query(Rule).filter(Rule.active == True).all()
+
+    if not active_rules:
+        return {"message": "No active rules to apply", "processed": 0, "discarded": 0, "saved": 0}
+
+    # Get all raw expenses in queue
+    raw_expenses = db.query(RawExpense).filter(
+        ~RawExpense.id.in_(
+            db.query(Expense.raw_expense_id).filter(Expense.raw_expense_id.isnot(None))
+        )
+    ).all()
+
+    processed_count = 0
+    discarded_count = 0
+    saved_count = 0
+
+    for raw_expense in raw_expenses:
+        # Check each rule in order
+        for rule in active_rules:
+            if _matches_rule(raw_expense, rule):
+                if rule.action == "discard":
+                    db.delete(raw_expense)
+                    discarded_count += 1
+                elif rule.action == "save":
+                    # Process the expense using save_data
+                    save_data = rule.save_data
+                    merchant_name = save_data["merchant_name"]
+                    category_id = save_data["category_id"]
+                    description = save_data.get("description", "")
+                    tag_names = save_data.get("tags", [])
+
+                    # Handle merchant alias
+                    merchant_alias = None
+                    if merchant_name:
+                        merchant_alias = db.query(MerchantAlias).filter(
+                            MerchantAlias.display_name == merchant_name
+                        ).first()
+
+                        if not merchant_alias:
+                            merchant_alias = MerchantAlias(
+                                raw_name=raw_expense.raw_merchant_name or merchant_name,
+                                display_name=merchant_name,
+                                default_category_id=category_id
+                            )
+                            db.add(merchant_alias)
+                            db.flush()
+
+                    # Create the expense
+                    expense = Expense(
+                        raw_expense_id=raw_expense.id,
+                        bank_account_id=raw_expense.bank_account_id,
+                        transaction_date=raw_expense.transaction_date,
+                        amount=raw_expense.amount,
+                        currency=raw_expense.currency,
+                        merchant_alias_id=merchant_alias.id if merchant_alias else None,
+                        category_id=category_id,
+                        description=description
+                    )
+
+                    db.add(expense)
+                    db.flush()
+
+                    # Handle tags
+                    for tag_name in tag_names:
+                        tag = db.query(Tag).filter(Tag.name == tag_name).first()
+                        if not tag:
+                            tag = Tag(name=tag_name)
+                            db.add(tag)
+                            db.flush()
+
+                        expense_tag = ExpenseTag(expense_id=expense.id, tag_id=tag.id)
+                        db.add(expense_tag)
+
+                    saved_count += 1
+
+                processed_count += 1
+                break  # Stop checking other rules for this expense
+
+    db.commit()
+    return {
+        "message": f"Applied {len(active_rules)} active rules",
+        "processed": processed_count,
+        "discarded": discarded_count,
+        "saved": saved_count
+    }
+
+def _matches_rule(raw_expense: RawExpense, rule: Rule) -> bool:
+    """Check if a raw expense matches a rule"""
+    # Get the field value from the raw expense
+    field_value = getattr(raw_expense, rule.field, None)
+    if field_value is None:
+        return False
+
+    # Convert to string for matching
+    field_value_str = str(field_value)
+
+    if rule.match_type == "exact":
+        return field_value_str == rule.match_value
+    elif rule.match_type == "regex":
+        try:
+            return bool(re.search(rule.match_value, field_value_str, re.IGNORECASE))
+        except re.error:
+            return False
+
+    return False

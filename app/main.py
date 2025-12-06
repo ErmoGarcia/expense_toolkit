@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from .config import settings
 from .database import create_tables
 from .routers import expenses, queue, categories, tags, merchants, import_xlsx, notifications
+from .routers.rules import router as rules_router
 
 # Create FastAPI app
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -21,6 +22,7 @@ app.include_router(tags.router, prefix=f"{settings.API_V1_STR}/tags", tags=["tag
 app.include_router(merchants.router, prefix=f"{settings.API_V1_STR}/merchants", tags=["merchants"])
 app.include_router(import_xlsx.router, prefix=f"{settings.API_V1_STR}/import", tags=["import"])
 app.include_router(notifications.router, prefix=f"{settings.API_V1_STR}/notifications", tags=["notifications"])
+app.include_router(rules_router, prefix=f"{settings.API_V1_STR}/rules", tags=["rules"])
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")

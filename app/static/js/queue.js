@@ -214,6 +214,7 @@ class QueueProcessor {
         await this.loadAllItems();
         await this.updateQueueCount();
         this.setupKeyboardNavigation();
+        this.setupButtonListeners();
     }
 
     async loadCategories() {
@@ -263,6 +264,18 @@ class QueueProcessor {
         });
     }
 
+    setupButtonListeners() {
+        const toolsBtn = document.getElementById('toolsBtn');
+        const rulesBtn = document.getElementById('rulesBtn');
+
+        if (toolsBtn) {
+            toolsBtn.addEventListener('click', () => this.openToolsModal());
+        }
+        if (rulesBtn) {
+            rulesBtn.addEventListener('click', () => this.openRulesModal());
+        }
+    }
+
     handleListKeyboard(e) {
         if (e.key === 'ArrowDown') {
             e.preventDefault();
@@ -300,6 +313,12 @@ class QueueProcessor {
         } else if (e.key === 's' && this.selectedIds.size > 0) {
             e.preventDefault();
             this.openBulkSaveModal();
+        } else if (e.key === 't') {
+            e.preventDefault();
+            this.openToolsModal();
+        } else if (e.key === 'r') {
+            e.preventDefault();
+            this.openRulesModal();
         }
     }
 
@@ -320,6 +339,12 @@ class QueueProcessor {
         } else if (e.key === 'p') {
             e.preventDefault();
             this.goToPrevious();
+        } else if (e.key === 't') {
+            e.preventDefault();
+            this.openToolsModal();
+        } else if (e.key === 'r') {
+            e.preventDefault();
+            this.openRulesModal();
         }
     }
 
@@ -327,6 +352,12 @@ class QueueProcessor {
         if (e.key === 'Escape') {
             e.preventDefault();
             this.closeBulkSaveModal();
+        } else if (e.key === 't') {
+            e.preventDefault();
+            this.openToolsModal();
+        } else if (e.key === 'r') {
+            e.preventDefault();
+            this.openRulesModal();
         }
     }
 
@@ -707,6 +738,12 @@ class QueueProcessor {
         // Close modal if clicking on overlay
         if (event.target.id === 'bulkModal') {
             this.closeBulkSaveModal();
+        } else if (event.target.id === 'toolsModal') {
+            this.closeToolsModal();
+        } else if (event.target.id === 'rulesModal') {
+            this.closeRulesModal();
+        } else if (event.target.id === 'createRuleModal') {
+            this.closeCreateRuleModal();
         }
     }
 
@@ -717,6 +754,383 @@ class QueueProcessor {
         }
         this.viewMode = 'list';
         this.bulkTags = [];
+    }
+
+    // Tools Modal
+    openToolsModal() {
+        this.viewMode = 'tools';
+
+        const modalHtml = `
+            <div class="modal-overlay" id="toolsModal" onclick="queueProcessor.handleModalClick(event)">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Tools</h2>
+                        <button class="modal-close" onclick="queueProcessor.closeToolsModal()">&times;</button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div class="tools-options">
+                            <button class="btn btn-primary btn-large" onclick="queueProcessor.applyAllRules()">
+                                Apply All Active Rules
+                                <div class="tool-description">Automatically process queue items using active rules</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeToolsModal()">
+                            Close <kbd>Esc</kbd>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const modalContainer = document.createElement('div');
+        modalContainer.id = 'modalContainer';
+        modalContainer.innerHTML = modalHtml;
+        document.body.appendChild(modalContainer);
+    }
+
+    closeToolsModal() {
+        const modalContainer = document.getElementById('modalContainer');
+        if (modalContainer) {
+            modalContainer.remove();
+        }
+        this.viewMode = this.viewMode === 'tools' ? 'list' : this.viewMode;
+    }
+
+    async applyAllRules() {
+        try {
+            const response = await fetch('/api/queue/apply-rules', {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                alert(`Rules applied successfully!\n\nProcessed: ${result.processed}\nSaved: ${result.saved}\nDiscarded: ${result.discarded}`);
+                this.closeToolsModal();
+                await this.loadAllItems();
+                await this.updateQueueCount();
+            } else {
+                alert('Error applying rules: ' + result.detail);
+            }
+        } catch (error) {
+            console.error('Error applying rules:', error);
+            alert('Error applying rules: ' + error.message);
+        }
+    }
+
+    // Rules Modal
+    async openRulesModal() {
+        this.viewMode = 'rules';
+
+        try {
+            const response = await fetch('/api/rules');
+            const rules = await response.json();
+
+            const modalHtml = `
+                <div class="modal-overlay" id="rulesModal" onclick="queueProcessor.handleModalClick(event)">
+                    <div class="modal-content large-modal" onclick="event.stopPropagation()">
+                        <div class="modal-header">
+                            <h2>Rules Management</h2>
+                            <button class="modal-close" onclick="queueProcessor.closeRulesModal()">&times;</button>
+                        </div>
+
+                        <div class="modal-body">
+                            <div class="rules-header">
+                                <button class="btn btn-primary" onclick="queueProcessor.openCreateRuleModal()">
+                                    Create New Rule
+                                </button>
+                            </div>
+
+                            <div class="rules-list" id="rulesList">
+                                ${this.renderRulesList(rules)}
+                            </div>
+                        </div>
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeRulesModal()">
+                                Close <kbd>Esc</kbd>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const modalContainer = document.createElement('div');
+            modalContainer.id = 'modalContainer';
+            modalContainer.innerHTML = modalHtml;
+            document.body.appendChild(modalContainer);
+
+        } catch (error) {
+            console.error('Error loading rules:', error);
+            alert('Error loading rules: ' + error.message);
+        }
+    }
+
+    renderRulesList(rules) {
+        if (rules.length === 0) {
+            return '<div class="no-rules">No rules created yet. Click "Create New Rule" to get started.</div>';
+        }
+
+        return rules.map(rule => `
+            <div class="rule-item ${rule.active ? 'active' : 'inactive'}">
+                <div class="rule-header">
+                    <div class="rule-name">${rule.name}</div>
+                    <div class="rule-actions">
+                        <label class="switch">
+                            <input type="checkbox" ${rule.active ? 'checked' : ''} onchange="queueProcessor.toggleRule(${rule.id}, this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                        <button class="btn btn-small btn-danger" onclick="queueProcessor.deleteRule(${rule.id})">Delete</button>
+                    </div>
+                </div>
+                <div class="rule-details">
+                    <div class="rule-condition">
+                        <strong>Field:</strong> ${rule.field} |
+                        <strong>Match:</strong> ${rule.match_type} "${rule.match_value}"
+                    </div>
+                    <div class="rule-action">
+                        <strong>Action:</strong> ${rule.action}
+                        ${rule.action === 'save' ? this.renderSaveDetails(rule.save_data) : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    renderSaveDetails(saveData) {
+        return `
+            <div class="save-details">
+                <div><strong>Merchant:</strong> ${saveData.merchant_name}</div>
+                <div><strong>Category ID:</strong> ${saveData.category_id}</div>
+                ${saveData.description ? `<div><strong>Description:</strong> ${saveData.description}</div>` : ''}
+                ${saveData.tags && saveData.tags.length > 0 ? `<div><strong>Tags:</strong> ${saveData.tags.join(', ')}</div>` : ''}
+            </div>
+        `;
+    }
+
+    closeRulesModal() {
+        const modalContainer = document.getElementById('modalContainer');
+        if (modalContainer) {
+            modalContainer.remove();
+        }
+        this.viewMode = this.viewMode === 'rules' ? 'list' : this.viewMode;
+    }
+
+    async toggleRule(ruleId, active) {
+        try {
+            const response = await fetch(`/api/rules/${ruleId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active: active })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                alert('Error updating rule: ' + error.detail);
+                // Revert checkbox
+                event.target.checked = !active;
+            }
+        } catch (error) {
+            console.error('Error updating rule:', error);
+            alert('Error updating rule: ' + error.message);
+            // Revert checkbox
+            event.target.checked = !active;
+        }
+    }
+
+    async deleteRule(ruleId) {
+        if (!confirm('Are you sure you want to delete this rule?')) return;
+
+        try {
+            const response = await fetch(`/api/rules/${ruleId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                this.openRulesModal(); // Refresh the modal
+            } else {
+                const error = await response.json();
+                alert('Error deleting rule: ' + error.detail);
+            }
+        } catch (error) {
+            console.error('Error deleting rule:', error);
+            alert('Error deleting rule: ' + error.message);
+        }
+    }
+
+    openCreateRuleModal() {
+        // Close current modal and open create rule modal
+        this.closeRulesModal();
+        this.openCreateRuleForm();
+    }
+
+    openCreateRuleForm() {
+        this.viewMode = 'create-rule';
+
+        const modalHtml = `
+            <div class="modal-overlay" id="createRuleModal" onclick="queueProcessor.handleModalClick(event)">
+                <div class="modal-content large-modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Create New Rule</h2>
+                        <button class="modal-close" onclick="queueProcessor.closeCreateRuleModal()">&times;</button>
+                    </div>
+
+                    <div class="modal-body">
+                        <form id="createRuleForm" onsubmit="queueProcessor.createRule(event)">
+                            <div class="form-group">
+                                <label for="ruleName">Rule Name</label>
+                                <input type="text" id="ruleName" required placeholder="e.g., Discard Amazon subscriptions">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="ruleField">Field to Match</label>
+                                <select id="ruleField" required>
+                                    <option value="">Select field</option>
+                                    <option value="raw_merchant_name">Merchant Name</option>
+                                    <option value="raw_description">Description</option>
+                                    <option value="amount">Amount</option>
+                                    <option value="currency">Currency</option>
+                                    <option value="source">Source</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="matchType">Match Type</label>
+                                <select id="matchType" required>
+                                    <option value="exact">Exact Match</option>
+                                    <option value="regex">Regular Expression</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="matchValue">Match Value</label>
+                                <input type="text" id="matchValue" required placeholder="Value to match against">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="ruleAction">Action</label>
+                                <select id="ruleAction" required onchange="queueProcessor.toggleSaveFields(this.value)">
+                                    <option value="discard">Discard</option>
+                                    <option value="save">Save</option>
+                                </select>
+                            </div>
+
+                            <div id="saveFields" style="display: none;">
+                                <div class="form-group">
+                                    <label for="saveMerchant">Merchant Name</label>
+                                    <input type="text" id="saveMerchant" placeholder="Merchant alias for saved expenses">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="saveCategory">Category</label>
+                                    <select id="saveCategory">
+                                        <option value="">Select category</option>
+                                        ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="saveDescription">Description (optional)</label>
+                                    <input type="text" id="saveDescription" placeholder="Description for saved expenses">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="saveTags">Tags (optional)</label>
+                                    <input type="text" id="saveTags" placeholder="Comma-separated tags">
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeCreateRuleModal()">
+                            Cancel <kbd>Esc</kbd>
+                        </button>
+                        <button type="submit" form="createRuleForm" class="btn btn-primary">
+                            Create Rule
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const modalContainer = document.createElement('div');
+        modalContainer.id = 'modalContainer';
+        modalContainer.innerHTML = modalHtml;
+        document.body.appendChild(modalContainer);
+    }
+
+    toggleSaveFields(action) {
+        const saveFields = document.getElementById('saveFields');
+        const saveMerchant = document.getElementById('saveMerchant');
+        const saveCategory = document.getElementById('saveCategory');
+
+        if (action === 'save') {
+            saveFields.style.display = 'block';
+            saveMerchant.required = true;
+            saveCategory.required = true;
+        } else {
+            saveFields.style.display = 'none';
+            saveMerchant.required = false;
+            saveCategory.required = false;
+        }
+    }
+
+    closeCreateRuleModal() {
+        const modalContainer = document.getElementById('modalContainer');
+        if (modalContainer) {
+            modalContainer.remove();
+        }
+        this.viewMode = this.viewMode === 'create-rule' ? 'list' : this.viewMode;
+    }
+
+    async createRule(event) {
+        event.preventDefault();
+
+        const formData = {
+            name: document.getElementById('ruleName').value,
+            field: document.getElementById('ruleField').value,
+            match_type: document.getElementById('matchType').value,
+            match_value: document.getElementById('matchValue').value,
+            action: document.getElementById('ruleAction').value
+        };
+
+        if (formData.action === 'save') {
+            const tags = document.getElementById('saveTags').value
+                .split(',')
+                .map(tag => tag.trim())
+                .filter(tag => tag);
+
+            formData.save_data = {
+                merchant_name: document.getElementById('saveMerchant').value,
+                category_id: parseInt(document.getElementById('saveCategory').value),
+                description: document.getElementById('saveDescription').value,
+                tags: tags
+            };
+        }
+
+        try {
+            const response = await fetch('/api/rules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            if (response.ok) {
+                this.closeCreateRuleModal();
+                this.openRulesModal(); // Re-open rules modal to show the new rule
+            } else {
+                const error = await response.json();
+                alert('Error creating rule: ' + error.detail);
+            }
+        } catch (error) {
+            console.error('Error creating rule:', error);
+            alert('Error creating rule: ' + error.message);
+        }
     }
 
     async processBulkSave(event) {
