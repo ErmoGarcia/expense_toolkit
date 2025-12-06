@@ -32,6 +32,7 @@ def serialize_expense(expense, include_children=False):
         "periodic_expense_id": expense.periodic_expense_id,
         "parent_expense_id": expense.parent_expense_id,
         "is_recurring": expense.is_recurring,
+        "archived": expense.archived,
         "is_group": is_group,
         "merchant_alias": {
             "id": expense.merchant_alias.id,
@@ -82,8 +83,9 @@ async def get_expenses(
         joinedload(Expense.child_expenses)
     )
     
-    # Exclude child expenses (those with parent_expense_id)
+    # Exclude child expenses (those with parent_expense_id) and archived expenses
     query = query.filter(Expense.parent_expense_id == None)
+    query = query.filter(Expense.archived == False)
     
     # Apply filters
     if category_id:
@@ -106,6 +108,7 @@ async def get_expenses(
     
     # Get total count (need separate query for count with joinedload)
     count_query = db.query(Expense).filter(Expense.parent_expense_id == None)
+    count_query = count_query.filter(Expense.archived == False)
     if category_id:
         count_query = count_query.filter(Expense.category_id == category_id)
     if search:

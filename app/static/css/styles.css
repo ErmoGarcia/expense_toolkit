@@ -1363,3 +1363,105 @@ input:checked+.slider:before {
     max-width: 900px;
     width: 95vw;
 }
+
+/* Duplicate Detection */
+.duplicate-icon {
+    color: #dc3545;
+    font-size: 1.1rem;
+    margin-left: 0.5rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    display: inline-block;
+}
+
+.duplicate-icon:hover {
+    opacity: 0.7;
+}
+
+.duplicate-warning {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    border-radius: 4px;
+    color: #856404;
+}
+
+.duplicate-comparison {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.duplicate-item h3 {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+    color: #495057;
+    font-weight: 600;
+}
+
+.duplicate-item.current-transaction h3 {
+    color: #007bff;
+}
+
+.transaction-card {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1rem;
+    background: white;
+}
+
+.transaction-card.saved-transaction {
+    background-color: #f0f8ff;
+    border-color: #b8daff;
+}
+
+.duplicate-item.current-transaction .transaction-card {
+    border-color: #007bff;
+    border-width: 2px;
+}
+
+.transaction-details {
+    margin-bottom: 1rem;
+}
+
+.transaction-details .detail-row {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 1rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.transaction-details .detail-row:last-child {
+    border-bottom: none;
+}
+
+.transaction-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+}
+
+/* Responsive duplicate modal */
+@media (max-width: 768px) {
+    .duplicate-comparison {
+        gap: 1rem;
+    }
+    
+    .transaction-details .detail-row {
+        grid-template-columns: 100px 1fr;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+    }
+}

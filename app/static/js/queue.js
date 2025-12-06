@@ -209,6 +209,7 @@ class QueueProcessor {
         this.currentEditingChildId = null;
         this.merchantAutocomplete = null;
         this.bulkMerchantAutocomplete = null;
+        this.duplicates = {}; // Map of raw_expense_id -> duplicate info
         this.init();
     }
 
@@ -318,6 +319,9 @@ class QueueProcessor {
         } else if (e.key === 's' && this.selectedIds.size > 0) {
             e.preventDefault();
             this.openBulkSaveModal();
+        } else if (e.key === 'a' && this.selectedIds.size > 0) {
+            e.preventDefault();
+            this.archiveSelected();
         } else if (e.key === 'g' && this.selectedIds.size > 1) {
             e.preventDefault();
             this.openGroupModal();
@@ -456,7 +460,9 @@ class QueueProcessor {
         this.viewMode = 'list';
         document.getElementById('queueStatus').textContent = `${this.queueItems.length} items to process`;
 
-        const listHtml = this.queueItems.map((item, index) => `
+        const listHtml = this.queueItems.map((item, index) => {
+            const hasDuplicate = this.duplicates[item.id];
+            return `
             <div class="queue-list-item ${index === this.selectedIndex ? 'focused' : ''} ${this.selectedIds.has(item.id) ? 'selected' : ''}" 
                  data-index="${index}"
                  onclick="queueProcessor.handleItemClick(event, ${index})">
@@ -464,13 +470,17 @@ class QueueProcessor {
                     <span class="checkbox-indicator">${this.selectedIds.has(item.id) ? '✓' : ''}</span>
                 </div>
                 <div class="queue-item-date">${this.formatDate(item.transaction_date)}</div>
-                <div class="queue-item-merchant">${item.raw_merchant_name || 'Unknown'}</div>
+                <div class="queue-item-merchant">
+                    ${item.raw_merchant_name || 'Unknown'}
+                    ${hasDuplicate ? `<span class="duplicate-icon" onclick="event.stopPropagation(); queueProcessor.openDuplicateModal(${item.id})" title="Potential duplicate - click to review">⚠️</span>` : ''}
+                </div>
                 <div class="queue-item-amount ${parseFloat(item.amount) < 0 ? 'negative' : 'positive'}">
                     ${parseFloat(item.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(item.amount)).toFixed(2)}
                 </div>
                 <div class="queue-item-source">${item.source}</div>
             </div>
-        `).join('');
+        `;
+        }).join('');
 
         document.getElementById('queueContent').innerHTML = `
             <div class="queue-list-header">
@@ -492,6 +502,9 @@ class QueueProcessor {
                     <button class="btn btn-primary btn-small" onclick="queueProcessor.openBulkSaveModal()">
                         Save Selected <kbd>S</kbd>
                     </button>
+                    <button class="btn btn-warning btn-small" onclick="queueProcessor.archiveSelected()">
+                        Archive Selected <kbd>A</kbd>
+                    </button>
                     <button class="btn btn-info btn-small" onclick="queueProcessor.openGroupModal()">
                         Group Selected <kbd>G</kbd>
                     </button>
@@ -504,6 +517,7 @@ class QueueProcessor {
                     <span class="keyboard-hint">Enter Open</span>
                     <span class="keyboard-hint">Space Select</span>
                     <span class="keyboard-hint">Shift+↑↓ Multi-select</span>
+                    <span class="keyboard-hint">A Archive</span>
                     <span class="keyboard-hint">G Group</span>
                 </div>
             </div>
@@ -572,6 +586,52 @@ class QueueProcessor {
         } catch (error) {
             console.error('Error discarding items:', error);
             alert('Error discarding items: ' + error.message);
+        }
+    }
+
+    async archiveSelected() {
+        if (this.selectedIds.size === 0) return;
+
+        const count = this.selectedIds.size;
+        if (!confirm(`Are you sure you want to archive ${count} transaction${count > 1 ? 's' : ''}? These will be saved as archived expenses with minimal data.`)) return;
+
+        try {
+            const idsToArchive = Array.from(this.selectedIds);
+
+            const response = await fetch('/api/queue/archive', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ raw_expense_ids: idsToArchive })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to archive items');
+            }
+
+            const result = await response.json();
+
+            // Remove archived items from queue
+            this.queueItems = this.queueItems.filter(item => !this.selectedIds.has(item.id));
+            this.selectedIds.clear();
+
+            // Adjust index if needed
+            if (this.selectedIndex >= this.queueItems.length && this.queueItems.length > 0) {
+                this.selectedIndex = this.queueItems.length - 1;
+            }
+
+            await this.updateQueueCount();
+
+            if (this.queueItems.length === 0) {
+                this.renderEmptyQueue();
+            } else {
+                this.renderListView();
+            }
+
+            alert(`Archived ${result.archived_count} transaction${result.archived_count > 1 ? 's' : ''}`);
+        } catch (error) {
+            console.error('Error archiving items:', error);
+            alert('Error archiving items: ' + error.message);
         }
     }
 
@@ -825,6 +885,10 @@ class QueueProcessor {
                                 Apply All Active Rules
                                 <div class="tool-description">Automatically process queue items using active rules</div>
                             </button>
+                            <button class="btn btn-info btn-large" onclick="queueProcessor.findDuplicates()">
+                                Find Duplicates
+                                <div class="tool-description">Detect potential duplicate transactions by amount and date</div>
+                            </button>
                         </div>
                     </div>
 
@@ -870,6 +934,32 @@ class QueueProcessor {
         } catch (error) {
             console.error('Error applying rules:', error);
             alert('Error applying rules: ' + error.message);
+        }
+    }
+
+    async findDuplicates() {
+        try {
+            const response = await fetch('/api/queue/find-duplicates');
+            const duplicatesData = await response.json();
+
+            if (response.ok) {
+                this.duplicates = duplicatesData;
+                const duplicateCount = Object.keys(duplicatesData).length;
+                
+                this.closeToolsModal();
+                this.renderListView();
+                
+                if (duplicateCount > 0) {
+                    alert(`Found ${duplicateCount} transaction${duplicateCount > 1 ? 's' : ''} with potential duplicates.\n\nDuplicate items now show a red warning icon.`);
+                } else {
+                    alert('No duplicates found!');
+                }
+            } else {
+                alert('Error finding duplicates: ' + duplicatesData.detail);
+            }
+        } catch (error) {
+            console.error('Error finding duplicates:', error);
+            alert('Error finding duplicates: ' + error.message);
         }
     }
 
@@ -2186,6 +2276,206 @@ class QueueProcessor {
             } else {
                 this.closeGroupModal();
             }
+        }
+    }
+
+    openDuplicateModal(rawExpenseId) {
+        const duplicateInfo = this.duplicates[rawExpenseId];
+        if (!duplicateInfo) return;
+
+        const rawExpense = duplicateInfo.raw_expense;
+        const duplicates = duplicateInfo.duplicates;
+
+        const modalHtml = `
+            <div class="modal-overlay" id="duplicateModal" onclick="queueProcessor.handleDuplicateModalClick(event)">
+                <div class="modal-content large-modal duplicate-modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Potential Duplicate Transaction</h2>
+                        <button class="modal-close" onclick="queueProcessor.closeDuplicateModal()">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <p class="duplicate-warning">
+                            The following transactions have the same amount and date. Review them to determine if they are duplicates.
+                        </p>
+
+                        <div class="duplicate-comparison">
+                            <!-- Current Transaction -->
+                            <div class="duplicate-item current-transaction">
+                                <h3>Current Transaction (Unprocessed)</h3>
+                                <div class="transaction-card">
+                                    <div class="transaction-details">
+                                        <div class="detail-row">
+                                            <span class="detail-label">Date:</span>
+                                            <span class="detail-value">${this.formatDate(rawExpense.transaction_date)}</span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Amount:</span>
+                                            <span class="detail-value ${parseFloat(rawExpense.amount) < 0 ? 'negative' : 'positive'}">
+                                                ${parseFloat(rawExpense.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(rawExpense.amount)).toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <div class="detail-row">
+                                            <span class="detail-label">Merchant:</span>
+                                            <span class="detail-value">${rawExpense.raw_merchant_name || 'Unknown'}</span>
+                                        </div>
+                                        ${rawExpense.raw_description ? `
+                                        <div class="detail-row">
+                                            <span class="detail-label">Description:</span>
+                                            <span class="detail-value">${rawExpense.raw_description}</span>
+                                        </div>
+                                        ` : ''}
+                                        <div class="detail-row">
+                                            <span class="detail-label">Source:</span>
+                                            <span class="detail-value">${rawExpense.source}</span>
+                                        </div>
+                                    </div>
+                                    <div class="transaction-actions">
+                                        <button class="btn btn-danger btn-small" onclick="queueProcessor.discardFromDuplicateModal(${rawExpense.id})">
+                                            Discard This
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Duplicate Transactions -->
+                            ${duplicates.map((dup, index) => {
+                                const isSaved = dup.type === 'saved';
+                                return `
+                                <div class="duplicate-item">
+                                    <h3>${isSaved ? 'Saved Expense' : 'Unprocessed Transaction'} ${isSaved ? (dup.archived ? '(Archived)' : '') : ''}</h3>
+                                    <div class="transaction-card ${isSaved ? 'saved-transaction' : ''}">
+                                        <div class="transaction-details">
+                                            <div class="detail-row">
+                                                <span class="detail-label">Date:</span>
+                                                <span class="detail-value">${this.formatDate(dup.transaction_date)}</span>
+                                            </div>
+                                            <div class="detail-row">
+                                                <span class="detail-label">Amount:</span>
+                                                <span class="detail-value ${parseFloat(dup.amount) < 0 ? 'negative' : 'positive'}">
+                                                    ${parseFloat(dup.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(dup.amount)).toFixed(2)}
+                                                </span>
+                                            </div>
+                                            ${isSaved ? `
+                                            <div class="detail-row">
+                                                <span class="detail-label">Merchant:</span>
+                                                <span class="detail-value">${dup.merchant_alias || 'N/A'}</span>
+                                            </div>
+                                            <div class="detail-row">
+                                                <span class="detail-label">Category:</span>
+                                                <span class="detail-value">${dup.category || 'N/A'}</span>
+                                            </div>
+                                            ${dup.description ? `
+                                            <div class="detail-row">
+                                                <span class="detail-label">Description:</span>
+                                                <span class="detail-value">${dup.description}</span>
+                                            </div>
+                                            ` : ''}
+                                            ` : `
+                                            <div class="detail-row">
+                                                <span class="detail-label">Merchant:</span>
+                                                <span class="detail-value">${dup.raw_merchant_name || 'Unknown'}</span>
+                                            </div>
+                                            ${dup.raw_description ? `
+                                            <div class="detail-row">
+                                                <span class="detail-label">Description:</span>
+                                                <span class="detail-value">${dup.raw_description}</span>
+                                            </div>
+                                            ` : ''}
+                                            <div class="detail-row">
+                                                <span class="detail-label">Source:</span>
+                                                <span class="detail-value">${dup.source}</span>
+                                            </div>
+                                            `}
+                                        </div>
+                                        ${!isSaved ? `
+                                        <div class="transaction-actions">
+                                            <button class="btn btn-danger btn-small" onclick="queueProcessor.discardFromDuplicateModal(${dup.id})">
+                                                Discard This
+                                            </button>
+                                        </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeDuplicateModal()">
+                            Close <kbd>Esc</kbd>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const modalContainer = document.createElement('div');
+        modalContainer.id = 'duplicateModalContainer';
+        modalContainer.innerHTML = modalHtml;
+        document.body.appendChild(modalContainer);
+    }
+
+    handleDuplicateModalClick(event) {
+        if (event.target.id === 'duplicateModal') {
+            this.closeDuplicateModal();
+        }
+    }
+
+    closeDuplicateModal() {
+        const modalContainer = document.getElementById('duplicateModalContainer');
+        if (modalContainer) {
+            modalContainer.remove();
+        }
+    }
+
+    async discardFromDuplicateModal(rawExpenseId) {
+        if (!confirm('Are you sure you want to discard this transaction?')) return;
+
+        try {
+            const response = await fetch(`/api/queue/${rawExpenseId}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to discard item');
+            }
+
+            // Remove from queue items
+            this.queueItems = this.queueItems.filter(item => item.id !== rawExpenseId);
+            
+            // Remove from duplicates
+            delete this.duplicates[rawExpenseId];
+            
+            // Also remove this item from other items' duplicate lists
+            for (const key in this.duplicates) {
+                this.duplicates[key].duplicates = this.duplicates[key].duplicates.filter(
+                    dup => !(dup.type === 'raw' && dup.id === rawExpenseId)
+                );
+                
+                // If no duplicates remain, remove the entry
+                if (this.duplicates[key].duplicates.length === 0) {
+                    delete this.duplicates[key];
+                }
+            }
+
+            // Adjust selected index if needed
+            if (this.selectedIndex >= this.queueItems.length && this.queueItems.length > 0) {
+                this.selectedIndex = this.queueItems.length - 1;
+            }
+
+            await this.updateQueueCount();
+            this.closeDuplicateModal();
+
+            if (this.queueItems.length === 0) {
+                this.renderEmptyQueue();
+            } else {
+                this.renderListView();
+            }
+        } catch (error) {
+            console.error('Error discarding item:', error);
+            alert('Error discarding item: ' + error.message);
         }
     }
 }

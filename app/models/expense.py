@@ -44,6 +44,7 @@ class Expense(Base):
     periodic_expense_id = Column(Integer, ForeignKey("periodic_expenses.id"), nullable=True)
     parent_expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)  # For grouped expenses
     is_recurring = Column(Boolean, default=False)
+    archived = Column(Boolean, default=False)  # Mark old expenses not manually processed
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

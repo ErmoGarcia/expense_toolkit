@@ -268,6 +268,117 @@ def _matches_rule(raw_expense: RawExpense, rule: Rule) -> bool:
     return False
 
 
+@router.get("/find-duplicates")
+async def find_duplicates(db: Session = Depends(get_db)):
+    """Find duplicate raw expenses based on amount and date.
+    
+    Returns a map of raw_expense_id -> list of duplicate expenses (raw or saved).
+    """
+    # Get all unprocessed raw expenses
+    raw_expenses = db.query(RawExpense).filter(
+        ~RawExpense.id.in_(
+            db.query(Expense.raw_expense_id).filter(Expense.raw_expense_id.isnot(None))
+        )
+    ).all()
+    
+    duplicates = {}
+    
+    for raw_expense in raw_expenses:
+        # Find other raw expenses with same amount and date
+        other_raw = db.query(RawExpense).filter(
+            RawExpense.id != raw_expense.id,
+            RawExpense.transaction_date == raw_expense.transaction_date,
+            RawExpense.amount == raw_expense.amount
+        ).all()
+        
+        # Find saved expenses with same amount and date
+        saved = db.query(Expense).filter(
+            Expense.transaction_date == raw_expense.transaction_date,
+            Expense.amount == raw_expense.amount
+        ).all()
+        
+        if other_raw or saved:
+            duplicates[raw_expense.id] = {
+                "raw_expense": {
+                    "id": raw_expense.id,
+                    "transaction_date": str(raw_expense.transaction_date),
+                    "amount": float(raw_expense.amount),
+                    "raw_merchant_name": raw_expense.raw_merchant_name,
+                    "raw_description": raw_expense.raw_description,
+                    "source": raw_expense.source,
+                    "bank_account_id": raw_expense.bank_account_id
+                },
+                "duplicates": []
+            }
+            
+            # Add other raw expenses
+            for dup in other_raw:
+                duplicates[raw_expense.id]["duplicates"].append({
+                    "type": "raw",
+                    "id": dup.id,
+                    "transaction_date": str(dup.transaction_date),
+                    "amount": float(dup.amount),
+                    "raw_merchant_name": dup.raw_merchant_name,
+                    "raw_description": dup.raw_description,
+                    "source": dup.source,
+                    "bank_account_id": dup.bank_account_id
+                })
+            
+            # Add saved expenses
+            for exp in saved:
+                duplicates[raw_expense.id]["duplicates"].append({
+                    "type": "saved",
+                    "id": exp.id,
+                    "transaction_date": str(exp.transaction_date),
+                    "amount": float(exp.amount),
+                    "merchant_alias": exp.merchant_alias.display_name if exp.merchant_alias else None,
+                    "category": exp.category.name if exp.category else None,
+                    "description": exp.description,
+                    "archived": exp.archived
+                })
+    
+    return duplicates
+
+
+@router.post("/archive")
+async def archive_raw_expenses(data: dict, db: Session = Depends(get_db)):
+    """Archive multiple raw expenses by creating expense records with archived=True"""
+    raw_expense_ids = data.get("raw_expense_ids", [])
+    
+    if not raw_expense_ids:
+        raise HTTPException(status_code=400, detail="No raw expense IDs provided")
+    
+    archived_count = 0
+    
+    for raw_id in raw_expense_ids:
+        # Get raw expense
+        raw_expense = db.query(RawExpense).filter(RawExpense.id == raw_id).first()
+        if not raw_expense:
+            continue
+        
+        # Check if already processed
+        existing = db.query(Expense).filter(Expense.raw_expense_id == raw_id).first()
+        if existing:
+            continue
+        
+        # Create archived expense with minimal data
+        expense = Expense(
+            raw_expense_id=raw_id,
+            bank_account_id=raw_expense.bank_account_id,
+            transaction_date=raw_expense.transaction_date,
+            amount=raw_expense.amount,
+            currency=raw_expense.currency,
+            archived=True
+        )
+        
+        db.add(expense)
+        archived_count += 1
+    
+    db.commit()
+    
+    return {"message": f"Archived {archived_count} expense(s)", "archived_count": archived_count}
+
+
 @router.post("/group")
 async def create_expense_group(data: dict, db: Session = Depends(get_db)):
     """Create a grouped expense from multiple raw expenses.
