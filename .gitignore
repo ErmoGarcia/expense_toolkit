@@ -220,3 +220,6 @@ imports/
 
 # Keep examples directory tracked
 !examples/
+
+# Do not track database file
+*.db
