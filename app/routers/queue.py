@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import Optional
 from decimal import Decimal
 import re
@@ -80,6 +81,69 @@ async def get_queue_count(db: Session = Depends(get_db)):
     ).count()
     
     return {"count": count}
+
+@router.get("/suggestions/{raw_expense_id}")
+async def get_suggestions(raw_expense_id: int, db: Session = Depends(get_db)):
+    """Get suggestions for a raw expense based on merchant name.
+    
+    Returns:
+    - merchant_alias: If a merchant with the same raw_name exists
+    - category_id: If all expenses for that merchant have the same category
+    - tags: If all expenses for that merchant have the same tags
+    """
+    # Get the raw expense
+    raw_expense = db.query(RawExpense).filter(RawExpense.id == raw_expense_id).first()
+    if not raw_expense:
+        raise HTTPException(status_code=404, detail="Raw expense not found")
+    
+    suggestions = {
+        "merchant_alias": None,
+        "category_id": None,
+        "tags": []
+    }
+    
+    # Check if there's a merchant alias with this raw name
+    if raw_expense.raw_merchant_name:
+        merchant = db.query(MerchantAlias).filter(
+            MerchantAlias.raw_name == raw_expense.raw_merchant_name
+        ).first()
+        
+        if merchant:
+            suggestions["merchant_alias"] = merchant.display_name
+            
+            # Find all saved expenses for this merchant
+            expenses = db.query(Expense).filter(
+                Expense.merchant_alias_id == merchant.id
+            ).all()
+            
+            if expenses:
+                # Check if all expenses have the same category
+                category_ids = set(exp.category_id for exp in expenses if exp.category_id)
+                if len(category_ids) == 1:
+                    suggestions["category_id"] = category_ids.pop()
+                
+                # Check if all expenses have the same tags
+                # Get tags for each expense
+                expense_tag_sets = []
+                for exp in expenses:
+                    expense_tags = db.query(Tag).join(ExpenseTag).filter(
+                        ExpenseTag.expense_id == exp.id
+                    ).all()
+                    tag_names = set(tag.name for tag in expense_tags)
+                    expense_tag_sets.append(tag_names)
+                
+                # Only suggest tags if all expenses have the exact same set of tags
+                if expense_tag_sets:
+                    # Find the intersection of all tag sets
+                    common_tags = expense_tag_sets[0]
+                    for tag_set in expense_tag_sets[1:]:
+                        common_tags = common_tags.intersection(tag_set)
+                    
+                    # Only suggest if all expenses have the same tags (intersection equals all sets)
+                    if all(tag_set == common_tags for tag_set in expense_tag_sets):
+                        suggestions["tags"] = sorted(list(common_tags))
+    
+    return suggestions
 
 @router.post("/process")
 async def process_raw_expense(data: dict, db: Session = Depends(get_db)):

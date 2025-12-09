@@ -1545,22 +1545,29 @@ class QueueProcessor {
     }
 
     async suggestMerchant() {
-        if (!this.currentItem?.raw_merchant_name) return;
+        if (!this.currentItem?.id) return;
 
         try {
-            const response = await fetch(`/api/merchants/suggest?raw_name=${encodeURIComponent(this.currentItem.raw_merchant_name)}`);
-            const suggestion = await response.json();
+            const response = await fetch(`/api/queue/suggestions/${this.currentItem.id}`);
+            const suggestions = await response.json();
 
-            if (suggestion.suggestion) {
-                // Pre-fill the merchant input with the suggestion
-                document.getElementById('merchantName').value = suggestion.suggestion;
+            // Apply merchant alias suggestion
+            if (suggestions.merchant_alias) {
+                document.getElementById('merchantName').value = suggestions.merchant_alias;
+            }
 
-                if (suggestion.merchant?.default_category_id) {
-                    document.getElementById('categorySelect').value = suggestion.merchant.default_category_id;
-                }
+            // Apply category suggestion
+            if (suggestions.category_id) {
+                document.getElementById('categorySelect').value = suggestions.category_id;
+            }
+
+            // Apply tags suggestions
+            if (suggestions.tags && suggestions.tags.length > 0) {
+                this.currentTags = [...suggestions.tags];
+                this.renderTags();
             }
         } catch (error) {
-            console.error('Error getting merchant suggestion:', error);
+            console.error('Error getting suggestions:', error);
         }
     }
 
