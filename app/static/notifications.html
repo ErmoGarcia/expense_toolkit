@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Toolkit - Notifications</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <a href="/" class="logo">Expense Toolkit</a>
+                <nav class="nav">
+                    <a href="/" class="nav-link">Expenses</a>
+                    <a href="/queue" class="nav-link">
+                        Queue
+                        <span class="queue-badge" id="queueCount">0</span>
+                    </a>
+                    <a href="/import" class="nav-link">Import</a>
+                    <a href="/notifications" class="nav-link active">Notifications</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <section class="queue-container">
+            <div class="queue-header">
+                <h1>Notification Parser</h1>
+                <div class="queue-actions">
+                    <button class="btn btn-primary" id="parseAllBtn">
+                        Parse All Notifications
+                    </button>
+                </div>
+                <p id="notificationStatus">Click "Parse All" to process notifications</p>
+            </div>
+
+            <!-- Parsing Results Section -->
+            <div id="resultsSection" style="display: none;">
+                <div class="stats-cards" style="margin-bottom: 2rem;">
+                    <div class="stat-card">
+                        <h3>Total Notifications</h3>
+                        <p class="stat-value" id="totalNotifications">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Parsed as Expenses</h3>
+                        <p class="stat-value" id="parsedCount">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Discarded (Not Expenses)</h3>
+                        <p class="stat-value" id="discardedCount">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Already Processed</h3>
+                        <p class="stat-value" id="alreadyProcessedCount">0</p>
+                    </div>
+                </div>
+
+                <div class="queue-actions" style="margin-bottom: 1rem;">
+                    <button class="btn btn-success" id="acceptAllBtn" style="display: none;">
+                        Accept All Expenses
+                    </button>
+                </div>
+
+                <!-- Parsed Expenses List -->
+                <div id="parsedExpensesList">
+                    <!-- Expenses will be rendered here -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/js/notifications.js"></script>
+</body>
+</html>
