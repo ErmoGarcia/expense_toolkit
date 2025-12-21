@@ -477,19 +477,18 @@ async def archive_raw_expenses(data: dict, db: Session = Depends(get_db)):
     return {"message": f"Archived {archived_count} expense(s)", "archived_count": archived_count}
 
 
-@router.post("/group")
-async def create_expense_group(data: dict, db: Session = Depends(get_db)):
-    """Create a grouped expense from multiple raw expenses.
+@router.post("/merge")
+async def merge_expenses(data: dict, db: Session = Depends(get_db)):
+    """Merge multiple raw expenses into a single expense.
     
-    Creates a parent expense with the sum of amounts and earliest date,
-    and links all child expenses to it.
+    Creates a single expense with the sum of amounts and earliest date,
+    then archives the original raw expenses.
     """
     raw_expense_ids = data.get("raw_expense_ids", [])
-    parent_data = data.get("parent", {})
-    children_data = data.get("children", [])
+    expense_data = data.get("expense_data", {})
     
     if len(raw_expense_ids) < 2:
-        raise HTTPException(status_code=400, detail="At least 2 expenses are required for grouping")
+        raise HTTPException(status_code=400, detail="At least 2 expenses are required for merging")
     
     # Validate all raw expenses exist and are not processed
     raw_expenses = []
@@ -504,18 +503,18 @@ async def create_expense_group(data: dict, db: Session = Depends(get_db)):
         
         raw_expenses.append(raw_expense)
     
-    # Get parent expense data
-    merchant_name = parent_data.get("merchant_name")
-    category_id = parent_data.get("category_id")
-    description = parent_data.get("description", "")
-    tag_names = parent_data.get("tags", [])
-    periodic_expense_name = parent_data.get("periodic_expense_name")
+    # Get expense data
+    merchant_name = expense_data.get("merchant_name")
+    category_id = expense_data.get("category_id")
+    description = expense_data.get("description", "")
+    tag_names = expense_data.get("tags", [])
+    periodic_expense_name = expense_data.get("periodic_expense_name")
     
-    # Calculate parent amount (sum) and date (earliest)
+    # Calculate merged amount (sum) and date (earliest)
     total_amount = sum(float(raw.amount) for raw in raw_expenses)
     earliest_date = min(raw.transaction_date for raw in raw_expenses)
     
-    # Handle merchant alias for parent
+    # Handle merchant alias
     merchant_alias = None
     if merchant_name:
         merchant_alias = db.query(MerchantAlias).filter(
@@ -543,8 +542,8 @@ async def create_expense_group(data: dict, db: Session = Depends(get_db)):
             db.add(periodic_expense)
             db.flush()
     
-    # Create parent expense (no raw_expense_id since it's synthetic)
-    parent_expense = Expense(
+    # Create merged expense (no raw_expense_id since it represents multiple raw expenses)
+    merged_expense = Expense(
         raw_expense_id=None,
         bank_account_id=raw_expenses[0].bank_account_id,
         transaction_date=earliest_date,
@@ -556,10 +555,10 @@ async def create_expense_group(data: dict, db: Session = Depends(get_db)):
         periodic_expense_id=periodic_expense.id if periodic_expense else None
     )
     
-    db.add(parent_expense)
+    db.add(merged_expense)
     db.flush()
     
-    # Handle tags for parent
+    # Handle tags
     for tag_name in tag_names:
         tag = db.query(Tag).filter(Tag.name == tag_name).first()
         if not tag:
@@ -567,66 +566,17 @@ async def create_expense_group(data: dict, db: Session = Depends(get_db)):
             db.add(tag)
             db.flush()
         
-        expense_tag = ExpenseTag(expense_id=parent_expense.id, tag_id=tag.id)
+        expense_tag = ExpenseTag(expense_id=merged_expense.id, tag_id=tag.id)
         db.add(expense_tag)
     
-    # Create child expenses
-    children_by_raw_id = {c.get("raw_expense_id"): c for c in children_data}
-    child_expenses = []
-    
+    # Archive the original raw expenses
     for raw_expense in raw_expenses:
-        child_data = children_by_raw_id.get(raw_expense.id, {})
-        
-        # Child merchant - use individual if provided, else use parent's
-        child_merchant_name = child_data.get("merchant_name") or merchant_name
-        child_merchant_alias = None
-        if child_merchant_name:
-            child_merchant_alias = db.query(MerchantAlias).filter(
-                MerchantAlias.display_name == child_merchant_name
-            ).first()
-            
-            if not child_merchant_alias:
-                child_merchant_alias = MerchantAlias(
-                    raw_name=raw_expense.raw_merchant_name or child_merchant_name,
-                    display_name=child_merchant_name,
-                    default_category_id=child_data.get("category_id") or category_id
-                )
-                db.add(child_merchant_alias)
-                db.flush()
-        
-        child_expense = Expense(
-            raw_expense_id=raw_expense.id,
-            bank_account_id=raw_expense.bank_account_id,
-            transaction_date=raw_expense.transaction_date,
-            amount=raw_expense.amount,
-            currency=raw_expense.currency,
-            merchant_alias_id=child_merchant_alias.id if child_merchant_alias else None,
-            category_id=child_data.get("category_id") or category_id,
-            description=child_data.get("description") or "",
-            parent_expense_id=parent_expense.id
-        )
-        
-        db.add(child_expense)
-        db.flush()
-        
-        # Handle tags for child
-        child_tag_names = child_data.get("tags", [])
-        for tag_name in child_tag_names:
-            tag = db.query(Tag).filter(Tag.name == tag_name).first()
-            if not tag:
-                tag = Tag(name=tag_name)
-                db.add(tag)
-                db.flush()
-            
-            expense_tag = ExpenseTag(expense_id=child_expense.id, tag_id=tag.id)
-            db.add(expense_tag)
-        
-        child_expenses.append(child_expense)
+        raw_expense.archived = True
     
     db.commit()
     
     return {
-        "message": "Expense group created successfully",
-        "parent_expense_id": parent_expense.id,
-        "child_expense_ids": [c.id for c in child_expenses]
+        "message": f"Successfully merged {len(raw_expenses)} expenses",
+        "expense_id": merged_expense.id,
+        "archived_raw_expense_ids": raw_expense_ids
     }

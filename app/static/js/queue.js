@@ -202,11 +202,9 @@ class QueueProcessor {
         this.categories = [];
         this.tags = [];
         this.currentTags = [];
-        this.viewMode = 'list'; // 'list', 'detail', 'bulk', or 'group'
+        this.viewMode = 'list'; // 'list', 'detail', 'bulk', or 'merge'
         this.bulkTags = [];
-        this.groupTags = [];
-        this.groupChildrenData = {};
-        this.currentEditingChildId = null;
+        this.mergeTags = [];
         this.merchantAutocomplete = null;
         this.bulkMerchantAutocomplete = null;
         this.duplicates = {}; // Map of raw_expense_id -> duplicate info
@@ -299,8 +297,8 @@ class QueueProcessor {
                 this.handleDetailKeyboard(e);
             } else if (this.viewMode === 'bulk') {
                 this.handleBulkKeyboard(e);
-            } else if (this.viewMode === 'group') {
-                this.handleGroupModalKeyboard(e);
+            } else if (this.viewMode === 'merge') {
+                this.handleMergeModalKeyboard(e);
             }
         });
     }
@@ -445,9 +443,9 @@ class QueueProcessor {
         } else if (e.key === 'a' && this.selectedIds.size > 0) {
             e.preventDefault();
             this.archiveSelected();
-        } else if (e.key === 'g' && this.selectedIds.size > 1) {
+        } else if (e.key === 'm' && this.selectedIds.size > 1) {
             e.preventDefault();
-            this.openGroupModal();
+            this.openMergeModal();
         } else if (e.key === 't') {
             e.preventDefault();
             this.openToolsModal();
@@ -653,8 +651,8 @@ class QueueProcessor {
                     <button class="btn btn-warning btn-small" onclick="queueProcessor.archiveSelected()">
                         Archive Selected <kbd>A</kbd>
                     </button>
-                    <button class="btn btn-info btn-small" onclick="queueProcessor.openGroupModal()">
-                        Group Selected <kbd>G</kbd>
+                    <button class="btn btn-info btn-small" onclick="queueProcessor.openMergeModal()">
+                        Merge Selected <kbd>M</kbd>
                     </button>
                     <button class="btn btn-secondary btn-small" onclick="queueProcessor.clearSelection()">
                         Clear Selection <kbd>Esc</kbd>
@@ -666,7 +664,7 @@ class QueueProcessor {
                     <span class="keyboard-hint">Space Select</span>
                     <span class="keyboard-hint">Shift+↑↓ Multi-select</span>
                     <span class="keyboard-hint">A Archive</span>
-                    <span class="keyboard-hint">G Group</span>
+                    <span class="keyboard-hint">M Merge</span>
                 </div>
             </div>
         `;
@@ -1001,8 +999,8 @@ class QueueProcessor {
             this.closeRulesModal();
         } else if (event.target.id === 'createRuleModal') {
             this.closeCreateRuleModal();
-        } else if (event.target.id === 'groupModal') {
-            this.closeGroupModal();
+        } else if (event.target.id === 'mergeModal') {
+            this.closeMergeModal();
         }
     }
 
@@ -1901,17 +1899,16 @@ class QueueProcessor {
         return new Date(dateString + 'T00:00:00').toLocaleDateString('en-GB');
     }
 
-    // ==================== GROUP EXPENSE FUNCTIONALITY ====================
+    // ==================== MERGE EXPENSE FUNCTIONALITY ====================
 
-    openGroupModal() {
+    openMergeModal() {
         if (this.selectedIds.size < 2) {
-            alert('Please select at least 2 expenses to group');
+            alert('Please select at least 2 expenses to merge');
             return;
         }
 
-        this.viewMode = 'group';
-        this.groupTags = [];
-        this.groupChildrenData = {};
+        this.viewMode = 'merge';
+        this.mergeTags = [];
 
         const selectedItems = this.queueItems.filter(item => this.selectedIds.has(item.id));
         const totalAmount = selectedItems.reduce((sum, item) => sum + parseFloat(item.amount), 0);
@@ -1920,23 +1917,12 @@ class QueueProcessor {
             return !earliest || date < earliest ? date : earliest;
         }, null);
 
-        // Initialize children data
-        selectedItems.forEach(item => {
-            this.groupChildrenData[item.id] = {
-                raw_expense_id: item.id,
-                merchant_name: '',
-                category_id: null,
-                description: '',
-                tags: []
-            };
-        });
-
         const modalHtml = `
-            <div class="modal-overlay" id="groupModal" onclick="queueProcessor.handleModalClick(event)">
+            <div class="modal-overlay" id="mergeModal" onclick="queueProcessor.handleModalClick(event)">
                 <div class="modal-content large-modal" onclick="event.stopPropagation()">
                     <div class="modal-header">
-                        <h2>Group ${this.selectedIds.size} Expenses</h2>
-                        <button class="modal-close" onclick="queueProcessor.closeGroupModal()">&times;</button>
+                        <h2>Merge ${this.selectedIds.size} Expenses</h2>
+                        <button class="modal-close" onclick="queueProcessor.closeMergeModal()">&times;</button>
                     </div>
                     
                     <div class="modal-body">
@@ -1956,32 +1942,32 @@ class QueueProcessor {
                         </div>
 
                         <div class="group-section">
-                            <h3>Parent Expense Details</h3>
-                            <p class="section-description">These details apply to the grouped expense shown in your expenses list.</p>
+                            <h3>Merged Expense Details</h3>
+                            <p class="section-description">The selected expenses will be merged into a single expense with the details below. Original expenses will be archived.</p>
                             
-                            <form id="groupParentForm">
+                            <form id="mergeForm">
                                 <div class="form-group">
-                                    <label for="groupMerchantName">Merchant Alias</label>
-                                    <input type="text" id="groupMerchantName" placeholder="Start typing to see suggestions..." required>
+                                    <label for="mergeMerchantName">Merchant Alias</label>
+                                    <input type="text" id="mergeMerchantName" placeholder="Start typing to see suggestions..." required>
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="groupCategorySelect">Category</label>
-                                    <select id="groupCategorySelect" required>
+                                    <label for="mergeCategorySelect">Category</label>
+                                    <select id="mergeCategorySelect" required>
                                         <option value="">Select a category</option>
                                         ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
                                     </select>
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="groupDescription">Description (optional)</label>
-                                    <input type="text" id="groupDescription" placeholder="Add a description for the grouped expense">
+                                    <label for="mergeDescription">Description (optional)</label>
+                                    <input type="text" id="mergeDescription" placeholder="Add a description for the merged expense">
                                 </div>
 
                                 <div class="form-group">
-                                    <label for="groupTagInput">Tags</label>
-                                    <input type="text" id="groupTagInput" placeholder="Start typing to see existing tags..." autocomplete="off">
-                                    <div class="tags-input" id="groupTagsContainer">
+                                    <label for="mergeTagInput">Tags</label>
+                                    <input type="text" id="mergeTagInput" placeholder="Start typing to see existing tags..." autocomplete="off">
+                                    <div class="tags-input" id="mergeTagsContainer">
                                         <!-- Tags will be added here -->
                                     </div>
                                 </div>
@@ -1990,22 +1976,22 @@ class QueueProcessor {
                                     <label class="switch-label">
                                         Periodic expense
                                         <label class="switch">
-                                            <input type="checkbox" id="groupIsPeriodic">
+                                            <input type="checkbox" id="mergeIsPeriodic">
                                             <span class="slider"></span>
                                         </label>
                                     </label>
                                 </div>
 
-                                <div class="form-group" id="groupPeriodicExpenseGroup" style="display: none;">
-                                    <label for="groupPeriodicExpenseName">Periodic Expense Name</label>
-                                    <input type="text" id="groupPeriodicExpenseName" placeholder="Start typing to see suggestions..." autocomplete="off">
+                                <div class="form-group" id="mergePeriodicExpenseGroup" style="display: none;">
+                                    <label for="mergePeriodicExpenseName">Periodic Expense Name</label>
+                                    <input type="text" id="mergePeriodicExpenseName" placeholder="Start typing to see suggestions..." autocomplete="off">
                                 </div>
                             </form>
                         </div>
 
                         <div class="group-section">
-                            <h3>Child Expenses</h3>
-                            <p class="section-description">Individual expenses that make up this group. Click Edit to customize each one.</p>
+                            <h3>Expenses to Merge</h3>
+                            <p class="section-description"></p>
                             
                             <div class="group-children-list" id="groupChildrenList">
                                 ${selectedItems.map(item => `
@@ -2017,12 +2003,8 @@ class QueueProcessor {
                                                 ${parseFloat(item.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(item.amount)).toFixed(2)}
                                             </span>
                                         </div>
-                                        <div class="group-child-custom" id="childCustom_${item.id}">
-                                            <!-- Custom settings will appear here -->
-                                        </div>
-                                        <button type="button" class="btn btn-small btn-secondary" onclick="queueProcessor.openChildEditModal(${item.id})">
-                                            Edit
-                                        </button>
+                                        
+                                        
                                     </div>
                                 `).join('')}
                             </div>
@@ -2030,11 +2012,11 @@ class QueueProcessor {
                     </div>
                     
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeGroupModal()">
+                        <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeMergeModal()">
                             Cancel <kbd>Esc</kbd>
                         </button>
-                        <button type="button" class="btn btn-primary" onclick="queueProcessor.saveGroupedExpense()">
-                            Save Group
+                        <button type="button" class="btn btn-primary" onclick="queueProcessor.saveMergedExpense()">
+                            Merge Expenses
                         </button>
                     </div>
                 </div>
@@ -2046,19 +2028,19 @@ class QueueProcessor {
         modalContainer.innerHTML = modalHtml;
         document.body.appendChild(modalContainer);
 
-        this.setupGroupFormEvents();
-        document.getElementById('groupMerchantName').focus();
+        this.setupMergeFormEvents();
+        document.getElementById('mergeMerchantName').focus();
     }
 
-    setupGroupFormEvents() {
-        // Initialize autocomplete for group merchant
-        const groupMerchantInput = document.getElementById('groupMerchantName');
-        new Autocomplete(groupMerchantInput, {
+    setupMergeFormEvents() {
+        // Initialize autocomplete for merge merchant
+        const mergeMerchantInput = document.getElementById('mergeMerchantName');
+        new Autocomplete(mergeMerchantInput, {
             endpoint: '/api/merchants',
             displayField: 'display_name',
             onSelect: (merchant) => {
                 if (merchant.default_category_id) {
-                    document.getElementById('groupCategorySelect').value = merchant.default_category_id;
+                    document.getElementById('mergeCategorySelect').value = merchant.default_category_id;
                 }
             },
             createData: (value) => ({
@@ -2067,44 +2049,44 @@ class QueueProcessor {
             })
         });
 
-        // Initialize autocomplete for group tags
-        const groupTagInput = document.getElementById('groupTagInput');
-        new Autocomplete(groupTagInput, {
+        // Initialize autocomplete for merge tags
+        const mergeTagInput = document.getElementById('mergeTagInput');
+        new Autocomplete(mergeTagInput, {
             endpoint: '/api/tags',
             displayField: 'name',
             onSelect: (tag) => {
-                this.addGroupTag(tag.name);
-                groupTagInput.value = '';
+                this.addMergeTag(tag.name);
+                mergeTagInput.value = '';
             },
             onCreate: (tag) => {
-                this.addGroupTag(tag.name);
-                groupTagInput.value = '';
+                this.addMergeTag(tag.name);
+                mergeTagInput.value = '';
             },
             createData: (value) => ({ name: value })
         });
 
-        groupTagInput.addEventListener('keypress', (e) => {
+        mergeTagInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                const value = groupTagInput.value.trim();
+                const value = mergeTagInput.value.trim();
                 if (value) {
-                    this.addGroupTag(value);
-                    groupTagInput.value = '';
+                    this.addMergeTag(value);
+                    mergeTagInput.value = '';
                 }
             }
         });
 
         // Periodic expense toggle
-        document.getElementById('groupIsPeriodic').addEventListener('change', (e) => {
-            const periodicGroup = document.getElementById('groupPeriodicExpenseGroup');
+        document.getElementById('mergeIsPeriodic').addEventListener('change', (e) => {
+            const periodicGroup = document.getElementById('mergePeriodicExpenseGroup');
             periodicGroup.style.display = e.target.checked ? 'block' : 'none';
             if (!e.target.checked) {
-                document.getElementById('groupPeriodicExpenseName').value = '';
+                document.getElementById('mergePeriodicExpenseName').value = '';
             }
         });
 
         // Initialize autocomplete for periodic expense
-        const periodicInput = document.getElementById('groupPeriodicExpenseName');
+        const periodicInput = document.getElementById('mergePeriodicExpenseName');
         new Autocomplete(periodicInput, {
             endpoint: '/api/periodic-expenses',
             displayField: 'name',
@@ -2113,279 +2095,79 @@ class QueueProcessor {
         });
     }
 
-    addGroupTag(tagName) {
-        if (!tagName || this.groupTags.includes(tagName)) return;
-        this.groupTags.push(tagName);
-        this.renderGroupTags();
+    addMergeTag(tagName) {
+        if (!tagName || this.mergeTags.includes(tagName)) return;
+        this.mergeTags.push(tagName);
+        this.renderMergeTags();
     }
 
-    removeGroupTag(tagName) {
-        this.groupTags = this.groupTags.filter(tag => tag !== tagName);
-        this.renderGroupTags();
+    removeMergeTag(tagName) {
+        this.mergeTags = this.mergeTags.filter(tag => tag !== tagName);
+        this.renderMergeTags();
     }
 
-    renderGroupTags() {
-        const container = document.getElementById('groupTagsContainer');
-        container.innerHTML = this.groupTags.map(tag => `
+    renderMergeTags() {
+        const container = document.getElementById('mergeTagsContainer');
+        container.innerHTML = this.mergeTags.map(tag => `
             <div class="tag-item">
                 #${tag}
-                <button type="button" class="tag-remove" onclick="queueProcessor.removeGroupTag('${tag}')">×</button>
+                <button type="button" class="tag-remove" onclick="queueProcessor.removeMergeTag('${tag}')">×</button>
             </div>
         `).join('');
     }
 
-    openChildEditModal(rawExpenseId) {
-        const item = this.queueItems.find(i => i.id === rawExpenseId);
-        if (!item) return;
 
-        const childData = this.groupChildrenData[rawExpenseId] || {};
 
-        const modalHtml = `
-            <div class="modal-overlay child-modal-overlay" id="childEditModal" onclick="queueProcessor.handleChildModalClick(event)">
-                <div class="modal-content" onclick="event.stopPropagation()">
-                    <div class="modal-header">
-                        <h2>Edit Child Expense</h2>
-                        <button class="modal-close" onclick="queueProcessor.closeChildEditModal()">&times;</button>
-                    </div>
-                    
-                    <div class="modal-body">
-                        <div class="child-expense-info">
-                            <div><strong>Date:</strong> ${this.formatDate(item.transaction_date)}</div>
-                            <div><strong>Original Merchant:</strong> ${item.raw_merchant_name || 'Unknown'}</div>
-                            <div><strong>Amount:</strong> <span class="${parseFloat(item.amount) < 0 ? 'negative' : 'positive'}">${parseFloat(item.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(item.amount)).toFixed(2)}</span></div>
-                        </div>
 
-                        <form id="childEditForm">
-                            <div class="form-group">
-                                <label for="childMerchantName">Merchant Alias (leave empty to use parent's)</label>
-                                <input type="text" id="childMerchantName" placeholder="Start typing to see suggestions..." value="${childData.merchant_name || ''}">
-                            </div>
 
-                            <div class="form-group">
-                                <label for="childCategorySelect">Category (leave empty to use parent's)</label>
-                                <select id="childCategorySelect">
-                                    <option value="">Use parent's category</option>
-                                    ${this.categories.map(cat => `<option value="${cat.id}" ${childData.category_id == cat.id ? 'selected' : ''}>${cat.name}</option>`).join('')}
-                                </select>
-                            </div>
 
-                            <div class="form-group">
-                                <label for="childDescription">Description</label>
-                                <input type="text" id="childDescription" placeholder="Add a description" value="${childData.description || ''}">
-                            </div>
 
-                            <div class="form-group">
-                                <label for="childTagInput">Tags</label>
-                                <input type="text" id="childTagInput" placeholder="Start typing to see existing tags..." autocomplete="off">
-                                <div class="tags-input" id="childTagsContainer">
-                                    ${(childData.tags || []).map(tag => `
-                                        <div class="tag-item">
-                                            #${tag}
-                                            <button type="button" class="tag-remove" onclick="queueProcessor.removeChildTag(${rawExpenseId}, '${tag}')">×</button>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                    
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeChildEditModal()">
-                            Cancel
-                        </button>
-                        <button type="button" class="btn btn-primary" onclick="queueProcessor.saveChildEdit(${rawExpenseId})">
-                            Save Changes
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
 
-        const childModalContainer = document.createElement('div');
-        childModalContainer.id = 'childModalContainer';
-        childModalContainer.innerHTML = modalHtml;
-        document.body.appendChild(childModalContainer);
 
-        this.currentEditingChildId = rawExpenseId;
-        this.setupChildEditFormEvents(rawExpenseId);
-        document.getElementById('childMerchantName').focus();
-    }
-
-    setupChildEditFormEvents(rawExpenseId) {
-        // Initialize autocomplete for child merchant
-        const childMerchantInput = document.getElementById('childMerchantName');
-        new Autocomplete(childMerchantInput, {
-            endpoint: '/api/merchants',
-            displayField: 'display_name',
-            onSelect: (merchant) => {
-                if (merchant.default_category_id) {
-                    document.getElementById('childCategorySelect').value = merchant.default_category_id;
-                }
-            },
-            createData: (value) => ({
-                raw_name: value,
-                display_name: value
-            })
-        });
-
-        // Initialize autocomplete for child tags
-        const childTagInput = document.getElementById('childTagInput');
-        new Autocomplete(childTagInput, {
-            endpoint: '/api/tags',
-            displayField: 'name',
-            onSelect: (tag) => {
-                this.addChildTag(rawExpenseId, tag.name);
-                childTagInput.value = '';
-            },
-            onCreate: (tag) => {
-                this.addChildTag(rawExpenseId, tag.name);
-                childTagInput.value = '';
-            },
-            createData: (value) => ({ name: value })
-        });
-
-        childTagInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const value = childTagInput.value.trim();
-                if (value) {
-                    this.addChildTag(rawExpenseId, value);
-                    childTagInput.value = '';
-                }
-            }
-        });
-    }
-
-    addChildTag(rawExpenseId, tagName) {
-        if (!this.groupChildrenData[rawExpenseId]) {
-            this.groupChildrenData[rawExpenseId] = { tags: [] };
-        }
-        if (!this.groupChildrenData[rawExpenseId].tags) {
-            this.groupChildrenData[rawExpenseId].tags = [];
-        }
-        if (!this.groupChildrenData[rawExpenseId].tags.includes(tagName)) {
-            this.groupChildrenData[rawExpenseId].tags.push(tagName);
-            this.renderChildTags(rawExpenseId);
-        }
-    }
-
-    removeChildTag(rawExpenseId, tagName) {
-        if (this.groupChildrenData[rawExpenseId]?.tags) {
-            this.groupChildrenData[rawExpenseId].tags = this.groupChildrenData[rawExpenseId].tags.filter(t => t !== tagName);
-            this.renderChildTags(rawExpenseId);
-        }
-    }
-
-    renderChildTags(rawExpenseId) {
-        const container = document.getElementById('childTagsContainer');
-        if (!container) return;
-        const tags = this.groupChildrenData[rawExpenseId]?.tags || [];
-        container.innerHTML = tags.map(tag => `
-            <div class="tag-item">
-                #${tag}
-                <button type="button" class="tag-remove" onclick="queueProcessor.removeChildTag(${rawExpenseId}, '${tag}')">×</button>
-            </div>
-        `).join('');
-    }
-
-    saveChildEdit(rawExpenseId) {
-        const merchantName = document.getElementById('childMerchantName').value.trim();
-        const categoryId = document.getElementById('childCategorySelect').value;
-        const description = document.getElementById('childDescription').value.trim();
-
-        this.groupChildrenData[rawExpenseId] = {
-            raw_expense_id: rawExpenseId,
-            merchant_name: merchantName,
-            category_id: categoryId ? parseInt(categoryId) : null,
-            description: description,
-            tags: this.groupChildrenData[rawExpenseId]?.tags || []
-        };
-
-        // Update the custom indicator in the main modal
-        const customEl = document.getElementById(`childCustom_${rawExpenseId}`);
-        if (customEl) {
-            const hasCustom = merchantName || categoryId || description || (this.groupChildrenData[rawExpenseId]?.tags?.length > 0);
-            if (hasCustom) {
-                const parts = [];
-                if (merchantName) parts.push(`Merchant: ${merchantName}`);
-                if (categoryId) {
-                    const cat = this.categories.find(c => c.id == categoryId);
-                    if (cat) parts.push(`Category: ${cat.name}`);
-                }
-                if (description) parts.push(`Desc: ${description.substring(0, 20)}${description.length > 20 ? '...' : ''}`);
-                if (this.groupChildrenData[rawExpenseId]?.tags?.length > 0) {
-                    parts.push(`Tags: ${this.groupChildrenData[rawExpenseId].tags.join(', ')}`);
-                }
-                customEl.innerHTML = `<span class="custom-indicator">${parts.join(' | ')}</span>`;
-            } else {
-                customEl.innerHTML = '';
-            }
-        }
-
-        this.closeChildEditModal();
-    }
-
-    handleChildModalClick(event) {
-        if (event.target.id === 'childEditModal') {
-            this.closeChildEditModal();
-        }
-    }
-
-    closeChildEditModal() {
-        const childModalContainer = document.getElementById('childModalContainer');
-        if (childModalContainer) {
-            childModalContainer.remove();
-        }
-        this.currentEditingChildId = null;
-    }
-
-    closeGroupModal() {
+    closeMergeModal() {
         const modalContainer = document.getElementById('modalContainer');
         if (modalContainer) {
             modalContainer.remove();
         }
         this.viewMode = 'list';
-        this.groupTags = [];
-        this.groupChildrenData = {};
+        this.mergeTags = [];
     }
 
-    async saveGroupedExpense() {
-        const merchantName = document.getElementById('groupMerchantName').value.trim();
-        const categoryId = document.getElementById('groupCategorySelect').value;
-        const description = document.getElementById('groupDescription').value.trim();
-        const periodicExpenseName = document.getElementById('groupIsPeriodic').checked 
-            ? document.getElementById('groupPeriodicExpenseName').value.trim() 
+    async saveMergedExpense() {
+        const merchantName = document.getElementById('mergeMerchantName').value.trim();
+        const categoryId = document.getElementById('mergeCategorySelect').value;
+        const description = document.getElementById('mergeDescription').value.trim();
+        const periodicExpenseName = document.getElementById('mergeIsPeriodic').checked 
+            ? document.getElementById('mergePeriodicExpenseName').value.trim() 
             : null;
 
         if (!merchantName) {
-            alert('Please enter a merchant name for the grouped expense');
-            document.getElementById('groupMerchantName').focus();
+            alert('Please enter a merchant name for the merged expense');
+            document.getElementById('mergeMerchantName').focus();
             return;
         }
 
         if (!categoryId) {
-            alert('Please select a category for the grouped expense');
-            document.getElementById('groupCategorySelect').focus();
+            alert('Please select a category for the merged expense');
+            document.getElementById('mergeCategorySelect').focus();
             return;
         }
 
         const rawExpenseIds = Array.from(this.selectedIds);
-        const childrenData = rawExpenseIds.map(id => this.groupChildrenData[id] || { raw_expense_id: id });
 
         const payload = {
             raw_expense_ids: rawExpenseIds,
-            parent: {
+            expense_data: {
                 merchant_name: merchantName,
                 category_id: parseInt(categoryId),
                 description: description,
-                tags: this.groupTags,
+                tags: this.mergeTags,
                 periodic_expense_name: periodicExpenseName
-            },
-            children: childrenData
+            }
         };
 
         try {
-            const response = await fetch('/api/queue/group', {
+            const response = await fetch('/api/queue/merge', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -2393,7 +2175,7 @@ class QueueProcessor {
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.detail || 'Failed to create expense group');
+                throw new Error(error.detail || 'Failed to merge expenses');
             }
 
             const result = await response.json();
@@ -2407,7 +2189,7 @@ class QueueProcessor {
                 this.selectedIndex = this.queueItems.length - 1;
             }
 
-            this.closeGroupModal();
+            this.closeMergeModal();
             await this.updateQueueCount();
 
             if (this.queueItems.length === 0) {
@@ -2416,21 +2198,17 @@ class QueueProcessor {
                 this.renderListView();
             }
 
-            alert(`Expense group created successfully! Parent expense ID: ${result.parent_expense_id}`);
+            alert(`Expenses merged successfully! Merged expense ID: ${result.expense_id}`);
         } catch (error) {
-            console.error('Error creating expense group:', error);
-            alert('Error creating expense group: ' + error.message);
+            console.error('Error merging expenses:', error);
+            alert('Error merging expenses: ' + error.message);
         }
     }
 
-    handleGroupModalKeyboard(e) {
+    handleMergeModalKeyboard(e) {
         if (e.key === 'Escape') {
             e.preventDefault();
-            if (document.getElementById('childModalContainer')) {
-                this.closeChildEditModal();
-            } else {
-                this.closeGroupModal();
-            }
+            this.closeMergeModal();
         }
     }
 

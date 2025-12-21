@@ -12,10 +12,6 @@ router = APIRouter()
 
 def serialize_expense(expense, include_children=False):
     """Serialize an expense with its relationships"""
-    # Check if this expense has children (is a group parent)
-    child_expenses = getattr(expense, 'child_expenses', None) or []
-    is_group = len(child_expenses) > 0
-
     result = {
         "id": expense.id,
         "raw_expense_id": expense.raw_expense_id,
@@ -33,7 +29,6 @@ def serialize_expense(expense, include_children=False):
         "parent_expense_id": expense.parent_expense_id,
         "is_recurring": expense.is_recurring,
         "archived": expense.archived,
-        "is_group": is_group,
         "merchant_alias": {
             "id": expense.merchant_alias.id,
             "display_name": expense.merchant_alias.display_name,
@@ -69,14 +64,13 @@ async def get_expenses(
     search: Optional[str] = Query(None, description="Search in description/merchant"),
     date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-    include_children: bool = Query(False, description="Include child expenses in grouped expenses"),
     db: Session = Depends(get_db)
 ):
-    """Get expenses with optional filters. Child expenses are excluded by default."""
+    """Get expenses with optional filters."""
     query = db.query(Expense)
 
-    # Exclude child expenses (those with parent_expense_id) and archived expenses
-    query = query.filter(Expense.parent_expense_id == None)
+    # Exclude archived expenses
+    # Note: parent_expense_id is legacy and not used for merge functionality
     query = query.filter(Expense.archived == False)
 
     # Apply filters
@@ -117,8 +111,7 @@ async def get_expenses(
     query = query.order_by(Expense.transaction_date.desc())
 
     # Get total count (need separate query for count with joinedload)
-    count_query = db.query(Expense).filter(Expense.parent_expense_id == None)
-    count_query = count_query.filter(Expense.archived == False)
+    count_query = db.query(Expense).filter(Expense.archived == False)
 
     if category:
         try:
@@ -156,7 +149,7 @@ async def get_expenses(
     expenses = query.offset(skip).limit(limit).all()
 
     return {
-        "expenses": [serialize_expense(expense, include_children) for expense in expenses],
+        "expenses": [serialize_expense(expense) for expense in expenses],
         "total": total,
         "skip": skip,
         "limit": limit
@@ -164,19 +157,16 @@ async def get_expenses(
 
 @router.get("/{expense_id}")
 async def get_expense(expense_id: int, db: Session = Depends(get_db)):
-    """Get a single expense by ID with its child expenses if it's a group"""
+    """Get a single expense by ID"""
     expense = db.query(Expense).options(
         joinedload(Expense.merchant_alias),
         joinedload(Expense.category),
         joinedload(Expense.periodic_expense),
-        joinedload(Expense.tags),
-        joinedload(Expense.child_expenses).joinedload(Expense.merchant_alias),
-        joinedload(Expense.child_expenses).joinedload(Expense.category),
-        joinedload(Expense.child_expenses).joinedload(Expense.tags)
+        joinedload(Expense.tags)
     ).filter(Expense.id == expense_id).first()
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
-    return serialize_expense(expense, include_children=True)
+    return serialize_expense(expense)
 
 @router.put("/{expense_id}")
 async def update_expense(expense_id: int, expense_data: dict, db: Session = Depends(get_db)):
