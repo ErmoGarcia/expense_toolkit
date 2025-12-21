@@ -22,11 +22,23 @@ async def get_categories(
 @router.post("/")
 async def create_category(data: dict, db: Session = Depends(get_db)):
     """Create a new category"""
+    parent_id = data.get("parent_id")
+    
+    # Validate parent category exists and is same type
+    if parent_id:
+        parent = db.query(Category).filter(Category.id == parent_id).first()
+        if not parent:
+            raise HTTPException(status_code=404, detail="Parent category not found")
+        # Ensure parent is same type
+        if parent.category_type != data.get("category_type", "expense"):
+            raise HTTPException(status_code=400, detail="Parent category must be same type (expense/income)")
+    
     category = Category(
         name=data["name"],
         color=data.get("color"),
         icon=data.get("icon"),
-        category_type=data.get("category_type", "expense")
+        category_type=data.get("category_type", "expense"),
+        parent_id=parent_id
     )
     db.add(category)
     db.commit()

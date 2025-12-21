@@ -86,11 +86,43 @@ class ExpenseManager {
                 fetch('/api/tags').then(r => r.json())
             ]);
 
-            this.populateSelect('categoryFilter', categories, 'id', 'name');
+            this.categories = categories;
+            this.populateCategorySelect('categoryFilter', categories);
             this.populateSelect('tagsFilter', tags, 'id', 'name');
         } catch (error) {
             console.error('Error loading filters:', error);
         }
+    }
+
+    populateCategorySelect(selectId, categories) {
+        const select = document.getElementById(selectId);
+        const currentValue = select.value;
+        
+        // Clear existing options except the first one
+        select.innerHTML = select.querySelector('option').outerHTML;
+        
+        // Sort categories: parents first, then children
+        const parents = categories.filter(cat => !cat.parent_id);
+        const children = categories.filter(cat => cat.parent_id);
+        
+        // Add parent categories
+        parents.forEach(parent => {
+            const option = document.createElement('option');
+            option.value = parent.id;
+            option.textContent = parent.name;
+            select.appendChild(option);
+            
+            // Add children of this parent
+            const parentChildren = children.filter(child => child.parent_id === parent.id);
+            parentChildren.forEach(child => {
+                const childOption = document.createElement('option');
+                childOption.value = child.id;
+                childOption.innerHTML = '&nbsp;&nbsp;↳ ' + child.name;
+                select.appendChild(childOption);
+            });
+        });
+        
+        select.value = currentValue;
     }
 
     populateSelect(selectId, items, valueField, textField) {

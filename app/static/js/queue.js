@@ -269,6 +269,43 @@ class QueueProcessor {
         }
     }
 
+    formatCategoryOption(category) {
+        // Format category name with hierarchy indicator
+        if (category.parent_id) {
+            const parent = this.categories.find(c => c.id === category.parent_id);
+            const parentName = parent ? parent.name : 'Unknown';
+            return `&nbsp;&nbsp;↳ ${category.name} (${parentName})`;
+        }
+        return category.name;
+    }
+
+    buildCategoryOptionsHtml(categories) {
+        // Sort categories: parents first, then children
+        const parents = categories.filter(cat => !cat.parent_id);
+        const children = categories.filter(cat => cat.parent_id);
+        
+        let html = '';
+        
+        // Add parent categories
+        parents.forEach(parent => {
+            html += `<option value="${parent.id}">${parent.name}</option>`;
+            
+            // Add children of this parent
+            const parentChildren = children.filter(child => child.parent_id === parent.id);
+            parentChildren.forEach(child => {
+                html += `<option value="${child.id}">&nbsp;&nbsp;↳ ${child.name}</option>`;
+            });
+        });
+        
+        // Add orphaned children (if any)
+        const orphans = children.filter(child => !parents.find(p => p.id === child.parent_id));
+        orphans.forEach(orphan => {
+            html += `<option value="${orphan.id}">${orphan.name}</option>`;
+        });
+        
+        return html;
+    }
+
     async loadAllItems(preserveFocus = false) {
         try {
             // Build query parameters with filters
@@ -867,7 +904,7 @@ class QueueProcessor {
                                 <label for="bulkCategorySelect">Category (applied to all)</label>
                                 <select id="bulkCategorySelect" required>
                                     <option value="">Select a category</option>
-                                    ${this.getBulkCategories(selectedItems).map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                                    ${this.buildCategoryOptionsHtml(this.getBulkCategories(selectedItems))}
                                 </select>
                             </div>
 
@@ -1648,7 +1685,7 @@ class QueueProcessor {
                     <label for="categorySelect">Category</label>
                     <select id="categorySelect" required>
                         <option value="">Select a category</option>
-                        ${this.getFilteredCategories(item.amount).map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                        ${this.buildCategoryOptionsHtml(this.getFilteredCategories(item.amount))}
                     </select>
                 </div>
 

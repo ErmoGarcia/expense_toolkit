@@ -26,6 +26,13 @@ class CategoryManager {
             this.showModal();
         });
 
+        // Update parent options when type changes
+        document.addEventListener('change', (e) => {
+            if (e.target && e.target.id === 'categoryType') {
+                this.updateParentOptions();
+            }
+        });
+
         document.getElementById('closeModalBtn').addEventListener('click', () => {
             this.hideModal();
         });
@@ -101,11 +108,15 @@ class CategoryManager {
             return;
         }
 
+        // Organize into hierarchy
+        const hierarchy = this.buildHierarchy(filteredCategories);
+
         const tableHTML = `
             <table class="expenses-table">
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>Parent</th>
                         <th>Color</th>
                         <th>Icon</th>
                         <th>Created At</th>
@@ -113,30 +124,63 @@ class CategoryManager {
                     </tr>
                 </thead>
                 <tbody>
-                    ${filteredCategories.map(category => `
-                        <tr>
-                            <td>${category.name}</td>
-                            <td>
-                                ${category.color ? `
-                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <div style="width: 30px; height: 20px; background-color: ${category.color}; border: 1px solid #ccc; border-radius: 4px;"></div>
-                                        <span style="color: #6c757d; font-size: 0.9rem;">${category.color}</span>
-                                    </div>
-                                ` : '<span style="color: #6c757d;">-</span>'}
-                            </td>
-                            <td>${category.icon ? `<span style="font-size: 1.5rem;">${category.icon}</span>` : '<span style="color: #6c757d;">-</span>'}</td>
-                            <td>${this.formatDate(category.created_at)}</td>
-                            <td>
-                                <button class="btn btn-small btn-primary" onclick="categoryManager.editCategory(${category.id})">Edit</button>
-                                <button class="btn btn-small btn-danger" onclick="categoryManager.deleteCategory(${category.id})">Delete</button>
-                            </td>
-                        </tr>
-                    `).join('')}
+                    ${this.renderCategoryRows(hierarchy, 0)}
                 </tbody>
             </table>
         `;
 
         container.innerHTML = tableHTML;
+    }
+
+    buildHierarchy(categories) {
+        // Separate parent and child categories
+        const parents = categories.filter(cat => !cat.parent_id);
+        const children = categories.filter(cat => cat.parent_id);
+        
+        // Build tree structure
+        return parents.map(parent => ({
+            ...parent,
+            children: children.filter(child => child.parent_id === parent.id)
+        }));
+    }
+
+    renderCategoryRows(categories, level) {
+        let html = '';
+        
+        for (const category of categories) {
+            const indent = level > 0 ? '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(level) + '↳ ' : '';
+            const parentName = category.parent_id 
+                ? this.categories.find(c => c.id === category.parent_id)?.name || '-'
+                : '-';
+            
+            html += `
+                <tr>
+                    <td>${indent}${category.name}</td>
+                    <td>${parentName}</td>
+                    <td>
+                        ${category.color ? `
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <div style="width: 30px; height: 20px; background-color: ${category.color}; border: 1px solid #ccc; border-radius: 4px;"></div>
+                                <span style="color: #6c757d; font-size: 0.9rem;">${category.color}</span>
+                            </div>
+                        ` : '<span style="color: #6c757d;">-</span>'}
+                    </td>
+                    <td>${category.icon ? `<span style="font-size: 1.5rem;">${category.icon}</span>` : '<span style="color: #6c757d;">-</span>'}</td>
+                    <td>${this.formatDate(category.created_at)}</td>
+                    <td>
+                        <button class="btn btn-small btn-primary" onclick="categoryManager.editCategory(${category.id})">Edit</button>
+                        <button class="btn btn-small btn-danger" onclick="categoryManager.deleteCategory(${category.id})">Delete</button>
+                    </td>
+                </tr>
+            `;
+            
+            // Render children
+            if (category.children && category.children.length > 0) {
+                html += this.renderCategoryRows(category.children, level + 1);
+            }
+        }
+        
+        return html;
     }
 
     renderError(message) {
@@ -160,6 +204,10 @@ class CategoryManager {
             document.getElementById('categoryType').value = category.category_type || 'expense';
             document.getElementById('categoryColor').value = category.color || '#007bff';
             document.getElementById('categoryIcon').value = category.icon || '';
+            
+            // Update parent options first, then set value
+            this.updateParentOptions();
+            document.getElementById('categoryParent').value = category.parent_id || '';
         } else {
             // Add mode
             this.currentCategoryId = null;
@@ -167,10 +215,35 @@ class CategoryManager {
             form.reset();
             document.getElementById('categoryType').value = this.activeTab;
             document.getElementById('categoryColor').value = '#007bff';
+            
+            // Update parent options for the active tab
+            this.updateParentOptions();
         }
         
         modal.style.display = 'flex';
         document.getElementById('categoryName').focus();
+    }
+
+    updateParentOptions() {
+        const typeSelect = document.getElementById('categoryType');
+        const parentSelect = document.getElementById('categoryParent');
+        const selectedType = typeSelect.value;
+        
+        // Get categories of same type, excluding current category being edited
+        const availableParents = this.categories.filter(cat => 
+            cat.category_type === selectedType && 
+            cat.id !== this.currentCategoryId &&
+            !cat.parent_id  // Only show top-level categories as parents
+        );
+        
+        // Rebuild parent options
+        parentSelect.innerHTML = '<option value="">None (Top-level category)</option>';
+        availableParents.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = cat.name;
+            parentSelect.appendChild(option);
+        });
     }
 
     hideModal() {
@@ -183,6 +256,7 @@ class CategoryManager {
     async saveCategory() {
         const name = document.getElementById('categoryName').value.trim();
         const categoryType = document.getElementById('categoryType').value;
+        const parentId = document.getElementById('categoryParent').value;
         const color = document.getElementById('categoryColor').value;
         const icon = document.getElementById('categoryIcon').value.trim();
 
@@ -194,6 +268,7 @@ class CategoryManager {
         const data = {
             name: name,
             category_type: categoryType,
+            parent_id: parentId ? parseInt(parentId) : null,
             color: color,
             icon: icon || null
         };

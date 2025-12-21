@@ -77,7 +77,16 @@ async def get_expenses(
     if category:
         try:
             category_id = int(category)
-            query = query.filter(Expense.category_id == category_id)
+            # Get the category and its children
+            category_obj = db.query(Category).filter(Category.id == category_id).first()
+            if category_obj:
+                # Collect category ID and all child category IDs
+                category_ids = [category_id]
+                children = db.query(Category).filter(Category.parent_id == category_id).all()
+                category_ids.extend([child.id for child in children])
+                
+                # Filter by category or any of its children
+                query = query.filter(Expense.category_id.in_(category_ids))
         except ValueError:
             pass  # Invalid category ID, ignore filter
 
