@@ -9,4 +9,5 @@ class Category(Base):
     name = Column(String, unique=True, index=True, nullable=False)
     color = Column(String)  # hex color for UI
     icon = Column(String)   # optional icon identifier
+    category_type = Column(String, default="expense")  # 'expense' or 'income'
     created_at = Column(DateTime(timezone=True), server_default=func.now())

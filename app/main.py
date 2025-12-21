@@ -46,6 +46,10 @@ async def read_import():
 async def read_notifications():
     return FileResponse(settings.STATIC_DIR / "notifications.html")
 
+@app.get("/categories")
+async def read_categories():
+    return FileResponse(settings.STATIC_DIR / "categories.html")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

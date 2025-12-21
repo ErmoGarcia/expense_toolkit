@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.category import Category
@@ -6,9 +6,17 @@ from ..models.category import Category
 router = APIRouter()
 
 @router.get("/")
-async def get_categories(db: Session = Depends(get_db)):
-    """Get all categories"""
-    categories = db.query(Category).order_by(Category.name).all()
+async def get_categories(
+    category_type: str = Query(None, description="Filter by category type: 'expense' or 'income'"),
+    db: Session = Depends(get_db)
+):
+    """Get all categories, optionally filtered by type"""
+    query = db.query(Category)
+    
+    if category_type:
+        query = query.filter(Category.category_type == category_type)
+    
+    categories = query.order_by(Category.name).all()
     return categories
 
 @router.post("/")
@@ -17,7 +25,8 @@ async def create_category(data: dict, db: Session = Depends(get_db)):
     category = Category(
         name=data["name"],
         color=data.get("color"),
-        icon=data.get("icon")
+        icon=data.get("icon"),
+        category_type=data.get("category_type", "expense")
     )
     db.add(category)
     db.commit()

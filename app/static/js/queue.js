@@ -240,6 +240,35 @@ class QueueProcessor {
         }
     }
 
+    getFilteredCategories(amount) {
+        // Filter categories based on whether amount is income (positive) or expense (negative)
+        const categoryType = parseFloat(amount) >= 0 ? 'income' : 'expense';
+        return this.categories.filter(cat => 
+            cat.category_type === categoryType || !cat.category_type
+        );
+    }
+
+    getBulkCategories(items) {
+        // For bulk operations, check if all items are same type
+        const hasNegative = items.some(item => parseFloat(item.amount) < 0);
+        const hasPositive = items.some(item => parseFloat(item.amount) >= 0);
+        
+        if (hasNegative && hasPositive) {
+            // Mixed types - show all categories
+            return this.categories;
+        } else if (hasPositive) {
+            // All income
+            return this.categories.filter(cat => 
+                cat.category_type === 'income' || !cat.category_type
+            );
+        } else {
+            // All expense
+            return this.categories.filter(cat => 
+                cat.category_type === 'expense' || !cat.category_type
+            );
+        }
+    }
+
     async loadAllItems(preserveFocus = false) {
         try {
             // Build query parameters with filters
@@ -838,7 +867,7 @@ class QueueProcessor {
                                 <label for="bulkCategorySelect">Category (applied to all)</label>
                                 <select id="bulkCategorySelect" required>
                                     <option value="">Select a category</option>
-                                    ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                                    ${this.getBulkCategories(selectedItems).map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
                                 </select>
                             </div>
 
@@ -1619,7 +1648,7 @@ class QueueProcessor {
                     <label for="categorySelect">Category</label>
                     <select id="categorySelect" required>
                         <option value="">Select a category</option>
-                        ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                        ${this.getFilteredCategories(item.amount).map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
                     </select>
                 </div>
 

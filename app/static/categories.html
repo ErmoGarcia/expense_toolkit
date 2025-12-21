@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Toolkit - Categories</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <a href="/" class="logo">Expense Toolkit</a>
+                <nav class="nav">
+                    <a href="/" class="nav-link">Expenses</a>
+                    <a href="/queue" class="nav-link">
+                        Queue
+                        <span class="queue-badge" id="queueCount">0</span>
+                    </a>
+                    <a href="/import" class="nav-link">Import</a>
+                    <a href="/notifications" class="nav-link">Notifications</a>
+                    <a href="/categories" class="nav-link active">Categories</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <section class="categories-container">
+            <div class="categories-header">
+                <h2>Categories</h2>
+                <button class="btn btn-primary" id="addCategoryBtn">Add Category</button>
+            </div>
+            
+            <!-- Tabs -->
+            <div class="category-tabs">
+                <button class="category-tab active" data-type="expense">Expense Categories</button>
+                <button class="category-tab" data-type="income">Income Categories</button>
+            </div>
+            
+            <div id="categoriesContent">
+                <div style="text-align: center; padding: 2rem; color: #6c757d;">
+                    Loading categories...
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Add/Edit Category Modal -->
+    <div class="modal-overlay" id="categoryModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add Category</h2>
+                <button class="modal-close" id="closeModalBtn">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                <form id="categoryForm">
+                    <div class="form-group">
+                        <label for="categoryName">Name *</label>
+                        <input type="text" id="categoryName" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="categoryType">Type *</label>
+                        <select id="categoryType" required>
+                            <option value="expense">Expense</option>
+                            <option value="income">Income</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="categoryColor">Color</label>
+                        <input type="color" id="categoryColor" value="#007bff">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="categoryIcon">Icon</label>
+                        <input type="text" id="categoryIcon" placeholder="e.g., 🍔 🚗 🏠">
+                        <div class="suggestion">You can use emoji or text</div>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="saveBtn" form="categoryForm">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/categories.js"></script>
+</body>
+</html>

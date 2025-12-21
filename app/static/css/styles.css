@@ -1480,3 +1480,48 @@ input:checked+.slider:before {
 .queue-list-header input[type="checkbox"]:indeterminate {
     opacity: 0.6;
 }
+
+/* Category Tabs */
+.category-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid #e9ecef;
+    margin-bottom: 0;
+}
+
+.category-tab {
+    padding: 1rem 2rem;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: #6c757d;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: -2px;
+}
+
+.category-tab:hover {
+    color: #007bff;
+    background-color: #f8f9fa;
+}
+
+.category-tab.active {
+    color: #007bff;
+    border-bottom-color: #007bff;
+}
+
+.categories-container {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.categories-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
