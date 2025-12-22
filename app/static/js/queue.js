@@ -208,6 +208,9 @@ class QueueProcessor {
         this.merchantAutocomplete = null;
         this.bulkMerchantAutocomplete = null;
         this.duplicates = {}; // Map of raw_expense_id -> duplicate info
+        this.duplicateModalItems = []; // Items shown in duplicate modal
+        this.duplicateModalFocusIndex = 0; // Currently focused item in duplicate modal
+        this.duplicateModalKeyHandler = null; // Keyboard handler for duplicate modal
         this.filters = {
             dateFrom: '',
             dateTo: '',
@@ -2232,6 +2235,17 @@ class QueueProcessor {
         const rawExpense = duplicateInfo.raw_expense;
         const duplicates = duplicateInfo.duplicates;
 
+        // Build all items array (current + duplicates)
+        this.duplicateModalItems = [
+            { ...rawExpense, type: 'raw', isCurrentTransaction: true }
+        ];
+        
+        duplicates.forEach(dup => {
+            this.duplicateModalItems.push(dup);
+        });
+        
+        this.duplicateModalFocusIndex = 0;
+
         const modalHtml = `
             <div class="modal-overlay" id="duplicateModal" onclick="queueProcessor.handleDuplicateModalClick(event)">
                 <div class="modal-content large-modal duplicate-modal" onclick="event.stopPropagation()">
@@ -2242,115 +2256,25 @@ class QueueProcessor {
                     
                     <div class="modal-body">
                         <p class="duplicate-warning">
-                            The following transactions have the same amount and date. Review them to determine if they are duplicates.
+                            The following transactions have the same amount and date. Use <kbd>←</kbd> <kbd>→</kbd> to navigate, <kbd>S</kbd> to save, <kbd>X</kbd> to discard.
                         </p>
 
-                        <div class="duplicate-comparison">
-                            <!-- Current Transaction -->
-                            <div class="duplicate-item current-transaction">
-                                <h3>Current Transaction (Unprocessed)</h3>
-                                <div class="transaction-card">
-                                    <div class="transaction-details">
-                                        <div class="detail-row">
-                                            <span class="detail-label">Date:</span>
-                                            <span class="detail-value">${this.formatDate(rawExpense.transaction_date)}</span>
-                                        </div>
-                                        <div class="detail-row">
-                                            <span class="detail-label">Amount:</span>
-                                            <span class="detail-value ${parseFloat(rawExpense.amount) < 0 ? 'negative' : 'positive'}">
-                                                ${parseFloat(rawExpense.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(rawExpense.amount)).toFixed(2)}
-                                            </span>
-                                        </div>
-                                        <div class="detail-row">
-                                            <span class="detail-label">Merchant:</span>
-                                            <span class="detail-value">${rawExpense.raw_merchant_name || 'Unknown'}</span>
-                                        </div>
-                                        ${rawExpense.raw_description ? `
-                                        <div class="detail-row">
-                                            <span class="detail-label">Description:</span>
-                                            <span class="detail-value">${rawExpense.raw_description}</span>
-                                        </div>
-                                        ` : ''}
-                                        <div class="detail-row">
-                                            <span class="detail-label">Source:</span>
-                                            <span class="detail-value">${rawExpense.source}</span>
-                                        </div>
-                                    </div>
-                                    <div class="transaction-actions">
-                                        <button class="btn btn-danger btn-small" onclick="queueProcessor.discardFromDuplicateModal(${rawExpense.id})">
-                                            Discard This
-                                        </button>
-                                    </div>
-                                </div>
+                        <div class="duplicate-scroll-container" id="duplicateScrollContainer">
+                            <div class="duplicate-scroll-track" id="duplicateScrollTrack">
+                                ${this.renderDuplicateCards()}
                             </div>
-
-                            <!-- Duplicate Transactions -->
-                            ${duplicates.map((dup, index) => {
-                                const isSaved = dup.type === 'saved';
-                                return `
-                                <div class="duplicate-item">
-                                    <h3>${isSaved ? 'Saved Expense' : 'Unprocessed Transaction'} ${isSaved ? (dup.archived ? '(Archived)' : '') : ''}</h3>
-                                    <div class="transaction-card ${isSaved ? 'saved-transaction' : ''}">
-                                        <div class="transaction-details">
-                                            <div class="detail-row">
-                                                <span class="detail-label">Date:</span>
-                                                <span class="detail-value">${this.formatDate(dup.transaction_date)}</span>
-                                            </div>
-                                            <div class="detail-row">
-                                                <span class="detail-label">Amount:</span>
-                                                <span class="detail-value ${parseFloat(dup.amount) < 0 ? 'negative' : 'positive'}">
-                                                    ${parseFloat(dup.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(dup.amount)).toFixed(2)}
-                                                </span>
-                                            </div>
-                                            ${isSaved ? `
-                                            <div class="detail-row">
-                                                <span class="detail-label">Merchant:</span>
-                                                <span class="detail-value">${dup.merchant_alias || 'N/A'}</span>
-                                            </div>
-                                            <div class="detail-row">
-                                                <span class="detail-label">Category:</span>
-                                                <span class="detail-value">${dup.category || 'N/A'}</span>
-                                            </div>
-                                            ${dup.description ? `
-                                            <div class="detail-row">
-                                                <span class="detail-label">Description:</span>
-                                                <span class="detail-value">${dup.description}</span>
-                                            </div>
-                                            ` : ''}
-                                            ` : `
-                                            <div class="detail-row">
-                                                <span class="detail-label">Merchant:</span>
-                                                <span class="detail-value">${dup.raw_merchant_name || 'Unknown'}</span>
-                                            </div>
-                                            ${dup.raw_description ? `
-                                            <div class="detail-row">
-                                                <span class="detail-label">Description:</span>
-                                                <span class="detail-value">${dup.raw_description}</span>
-                                            </div>
-                                            ` : ''}
-                                            <div class="detail-row">
-                                                <span class="detail-label">Source:</span>
-                                                <span class="detail-value">${dup.source}</span>
-                                            </div>
-                                            `}
-                                        </div>
-                                        ${!isSaved ? `
-                                        <div class="transaction-actions">
-                                            <button class="btn btn-danger btn-small" onclick="queueProcessor.discardFromDuplicateModal(${dup.id})">
-                                                Discard This
-                                            </button>
-                                        </div>
-                                        ` : ''}
-                                    </div>
-                                </div>
-                                `;
-                            }).join('')}
                         </div>
                     </div>
                     
                     <div class="modal-footer">
+                        <div class="keyboard-hints">
+                            <span class="keyboard-hint">←→ Navigate</span>
+                            <span class="keyboard-hint">S Save</span>
+                            <span class="keyboard-hint">X Discard</span>
+                            <span class="keyboard-hint">Esc Close</span>
+                        </div>
                         <button type="button" class="btn btn-secondary" onclick="queueProcessor.closeDuplicateModal()">
-                            Close <kbd>Esc</kbd>
+                            Close
                         </button>
                     </div>
                 </div>
@@ -2361,6 +2285,178 @@ class QueueProcessor {
         modalContainer.id = 'duplicateModalContainer';
         modalContainer.innerHTML = modalHtml;
         document.body.appendChild(modalContainer);
+        
+        // Add keyboard listener for duplicate modal
+        this.duplicateModalKeyHandler = (e) => this.handleDuplicateModalKeyboard(e);
+        document.addEventListener('keydown', this.duplicateModalKeyHandler);
+        
+        // Scroll to show focused item
+        this.scrollToFocusedDuplicate();
+    }
+
+    renderDuplicateCards() {
+        return this.duplicateModalItems.map((item, index) => {
+            const isSaved = item.type === 'saved';
+            const isRaw = item.type === 'raw';
+            const isFocused = index === this.duplicateModalFocusIndex;
+            const isCurrentTransaction = item.isCurrentTransaction;
+            
+            let cardClass = 'duplicate-card';
+            if (isFocused) cardClass += ' focused';
+            if (isSaved) cardClass += ' saved-transaction';
+            if (isCurrentTransaction) cardClass += ' current-transaction';
+            
+            let headerText = '';
+            if (isCurrentTransaction) {
+                headerText = 'Current Transaction';
+            } else if (isSaved) {
+                headerText = item.archived ? 'Saved (Archived)' : 'Saved Expense';
+            } else {
+                headerText = 'Unprocessed';
+            }
+            
+            return `
+                <div class="${cardClass}" data-index="${index}" onclick="queueProcessor.focusDuplicateCard(${index})">
+                    <div class="duplicate-card-header">
+                        <span class="duplicate-card-type">${headerText}</span>
+                        ${isFocused ? '<span class="focus-indicator">●</span>' : ''}
+                    </div>
+                    <div class="duplicate-card-body">
+                        <div class="detail-row">
+                            <span class="detail-label">Date:</span>
+                            <span class="detail-value">${this.formatDate(item.transaction_date)}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Amount:</span>
+                            <span class="detail-value ${parseFloat(item.amount) < 0 ? 'negative' : 'positive'}">
+                                ${parseFloat(item.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(item.amount)).toFixed(2)}
+                            </span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Merchant:</span>
+                            <span class="detail-value">${isSaved ? (item.merchant_alias || 'N/A') : (item.raw_merchant_name || 'Unknown')}</span>
+                        </div>
+                        ${isSaved && item.category ? `
+                        <div class="detail-row">
+                            <span class="detail-label">Category:</span>
+                            <span class="detail-value">${item.category}</span>
+                        </div>
+                        ` : ''}
+                        ${(isSaved ? item.description : item.raw_description) ? `
+                        <div class="detail-row">
+                            <span class="detail-label">Description:</span>
+                            <span class="detail-value">${isSaved ? item.description : item.raw_description}</span>
+                        </div>
+                        ` : ''}
+                        ${isRaw ? `
+                        <div class="detail-row">
+                            <span class="detail-label">Source:</span>
+                            <span class="detail-value">${item.source}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="duplicate-card-actions">
+                        ${isRaw ? `
+                            <button class="btn btn-primary btn-small" onclick="event.stopPropagation(); queueProcessor.saveFromDuplicateModal(${item.id})">
+                                Save
+                            </button>
+                            <button class="btn btn-danger btn-small" onclick="event.stopPropagation(); queueProcessor.discardFromDuplicateModal(${item.id})">
+                                Discard
+                            </button>
+                        ` : `
+                            <span class="saved-badge">Already Saved</span>
+                        `}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    focusDuplicateCard(index) {
+        this.duplicateModalFocusIndex = index;
+        this.updateDuplicateCardsUI();
+        this.scrollToFocusedDuplicate();
+    }
+
+    updateDuplicateCardsUI() {
+        const track = document.getElementById('duplicateScrollTrack');
+        if (track) {
+            track.innerHTML = this.renderDuplicateCards();
+        }
+    }
+
+    scrollToFocusedDuplicate() {
+        const container = document.getElementById('duplicateScrollContainer');
+        const focusedCard = document.querySelector('.duplicate-card.focused');
+        
+        if (container && focusedCard) {
+            const containerRect = container.getBoundingClientRect();
+            const cardRect = focusedCard.getBoundingClientRect();
+            
+            // Calculate scroll position to center the focused card
+            const scrollLeft = focusedCard.offsetLeft - (containerRect.width / 2) + (cardRect.width / 2);
+            container.scrollTo({ left: Math.max(0, scrollLeft), behavior: 'smooth' });
+        }
+    }
+
+    handleDuplicateModalKeyboard(e) {
+        if (!document.getElementById('duplicateModal')) return;
+        
+        // Allow escape to close
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            this.closeDuplicateModal();
+            return;
+        }
+        
+        // Ignore if typing in input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            if (this.duplicateModalFocusIndex > 0) {
+                this.duplicateModalFocusIndex--;
+                this.updateDuplicateCardsUI();
+                this.scrollToFocusedDuplicate();
+            }
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            if (this.duplicateModalFocusIndex < this.duplicateModalItems.length - 1) {
+                this.duplicateModalFocusIndex++;
+                this.updateDuplicateCardsUI();
+                this.scrollToFocusedDuplicate();
+            }
+        } else if (e.key === 's' || e.key === 'S') {
+            e.preventDefault();
+            const focusedItem = this.duplicateModalItems[this.duplicateModalFocusIndex];
+            if (focusedItem && focusedItem.type === 'raw') {
+                this.saveFromDuplicateModal(focusedItem.id);
+            }
+        } else if (e.key === 'x' || e.key === 'X') {
+            e.preventDefault();
+            const focusedItem = this.duplicateModalItems[this.duplicateModalFocusIndex];
+            if (focusedItem && focusedItem.type === 'raw') {
+                this.discardFromDuplicateModal(focusedItem.id);
+            }
+        }
+    }
+
+    async saveFromDuplicateModal(rawExpenseId) {
+        // Find the item in queue
+        const queueItem = this.queueItems.find(item => item.id === rawExpenseId);
+        if (!queueItem) {
+            alert('Item not found in queue');
+            return;
+        }
+        
+        // Close duplicate modal and open detail view for this item
+        this.closeDuplicateModal();
+        
+        // Find index of this item in queue
+        const itemIndex = this.queueItems.findIndex(item => item.id === rawExpenseId);
+        if (itemIndex !== -1) {
+            this.openDetailView(itemIndex);
+        }
     }
 
     handleDuplicateModalClick(event) {
@@ -2374,6 +2470,16 @@ class QueueProcessor {
         if (modalContainer) {
             modalContainer.remove();
         }
+        
+        // Remove keyboard listener
+        if (this.duplicateModalKeyHandler) {
+            document.removeEventListener('keydown', this.duplicateModalKeyHandler);
+            this.duplicateModalKeyHandler = null;
+        }
+        
+        // Clear modal state
+        this.duplicateModalItems = [];
+        this.duplicateModalFocusIndex = 0;
     }
 
     async discardFromDuplicateModal(rawExpenseId) {
