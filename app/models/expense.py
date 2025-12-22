@@ -16,6 +16,7 @@ class RawExpense(Base):
     raw_description = Column(String)  # original description from bank
     source = Column(String, nullable=False)  # 'xlsx_import' or 'open_banking'
     source_file = Column(String)  # filename if xlsx import
+    type = Column(String, nullable=True)  # 'fixed', 'necessary variable', or 'discretionary'
     imported_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
@@ -41,10 +42,10 @@ class Expense(Base):
     notes = Column(String)  # optional longer notes
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    periodic_expense_id = Column(Integer, ForeignKey("periodic_expenses.id"), nullable=True)
     parent_expense_id = Column(Integer, ForeignKey("expenses.id"), nullable=True)  # Legacy field, not used for merge functionality
     is_recurring = Column(Boolean, default=False)
     archived = Column(Boolean, default=False)  # Mark old expenses not manually processed
+    type = Column(String, nullable=True)  # 'fixed', 'necessary variable', or 'discretionary'
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -54,7 +55,6 @@ class Expense(Base):
     bank_account = relationship("BankAccount")
     merchant_alias = relationship("MerchantAlias")
     category = relationship("Category")
-    periodic_expense = relationship("PeriodicExpense")
     tags = relationship("Tag", secondary="expense_tags")
     # Self-referential relationship (legacy, not used for merge functionality)
     parent_expense = relationship("Expense", remote_side=[id], foreign_keys=[parent_expense_id], backref="child_expenses")

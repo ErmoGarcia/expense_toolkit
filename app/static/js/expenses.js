@@ -185,6 +185,7 @@ class ExpenseManager {
                         <th>Amount</th>
                         <th>Tags</th>
                         <th></th>
+                        <th style="width: 40px;"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -206,7 +207,20 @@ class ExpenseManager {
                                 ).join('')}
                             </td>
                             <td class="expense-indicator">
-                                ${expense.periodic_expense ? '<span class="periodic-icon" title="Periodic">↻</span>' : ''}
+                                ${expense.type ? `<span class="type-badge type-${expense.type.replace(' ', '-')}">${expense.type}</span>` : ''}
+                            </td>
+                            <td class="expense-actions">
+                                <div class="expense-menu">
+                                    <button class="expense-menu-btn" onclick="expenseManager.toggleMenu(event, ${expense.id})" aria-label="Actions">
+                                        <span class="three-dots">⋮</span>
+                                    </button>
+                                    <div class="expense-menu-dropdown" id="menu-${expense.id}">
+                                        <button onclick="expenseManager.requeueExpense(${expense.id}, ${expense.raw_expense_id})" class="menu-item">
+                                            <span class="menu-icon">↩</span>
+                                            Send to Queue
+                                        </button>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     `).join('')}
@@ -406,6 +420,67 @@ class ExpenseManager {
             modalContainer.remove();
         }
         document.removeEventListener('keydown', this.handleModalKeydown);
+    }
+
+    toggleMenu(event, expenseId) {
+        event.stopPropagation();
+        
+        // Close all other open menus
+        document.querySelectorAll('.expense-menu-dropdown').forEach(menu => {
+            if (menu.id !== `menu-${expenseId}`) {
+                menu.classList.remove('show');
+            }
+        });
+        
+        // Toggle this menu
+        const menu = document.getElementById(`menu-${expenseId}`);
+        menu.classList.toggle('show');
+        
+        // Close menu when clicking outside
+        const closeMenu = (e) => {
+            if (!e.target.closest('.expense-menu')) {
+                menu.classList.remove('show');
+                document.removeEventListener('click', closeMenu);
+            }
+        };
+        
+        if (menu.classList.contains('show')) {
+            setTimeout(() => document.addEventListener('click', closeMenu), 0);
+        }
+    }
+
+    async requeueExpense(expenseId, rawExpenseId) {
+        if (!rawExpenseId) {
+            alert('This expense cannot be sent back to the queue because it has no associated raw expense.');
+            return;
+        }
+
+        if (!confirm('Are you sure you want to send this expense back to the queue for reprocessing?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/expenses/${expenseId}/requeue`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to requeue expense');
+            }
+
+            alert('Expense sent back to queue successfully!');
+            
+            // Reload the expenses and update queue count
+            await this.loadExpenses();
+            await this.updateQueueCount();
+        } catch (error) {
+            console.error('Error requeuing expense:', error);
+            alert('Error: ' + error.message);
+        }
     }
 }
 

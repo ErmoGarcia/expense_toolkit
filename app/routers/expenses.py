@@ -6,7 +6,6 @@ from ..models.expense import Expense
 from ..models.category import Category
 from ..models.tag import Tag, ExpenseTag
 from ..models.merchant import MerchantAlias
-from ..models.periodic_expense import PeriodicExpense
 
 router = APIRouter()
 
@@ -25,19 +24,15 @@ def serialize_expense(expense, include_children=False):
         "notes": expense.notes,
         "latitude": expense.latitude,
         "longitude": expense.longitude,
-        "periodic_expense_id": expense.periodic_expense_id,
         "parent_expense_id": expense.parent_expense_id,
         "is_recurring": expense.is_recurring,
         "archived": expense.archived,
+        "type": expense.type,
         "merchant_alias": {
             "id": expense.merchant_alias.id,
             "display_name": expense.merchant_alias.display_name,
             "raw_name": expense.merchant_alias.raw_name
         } if expense.merchant_alias else None,
-        "periodic_expense": {
-            "id": expense.periodic_expense.id,
-            "name": expense.periodic_expense.name
-        } if expense.periodic_expense else None,
         "category": {
             "id": expense.category.id,
             "name": expense.category.name,
@@ -170,7 +165,6 @@ async def get_expense(expense_id: int, db: Session = Depends(get_db)):
     expense = db.query(Expense).options(
         joinedload(Expense.merchant_alias),
         joinedload(Expense.category),
-        joinedload(Expense.periodic_expense),
         joinedload(Expense.tags)
     ).filter(Expense.id == expense_id).first()
     if not expense:
@@ -203,3 +197,22 @@ async def delete_expense(expense_id: int, db: Session = Depends(get_db)):
     db.delete(expense)
     db.commit()
     return {"message": "Expense deleted successfully"}
+
+@router.post("/{expense_id}/requeue")
+async def requeue_expense(expense_id: int, db: Session = Depends(get_db)):
+    """Send an expense back to the queue for reprocessing.
+    
+    This deletes the expense record, making the raw expense available in the queue again.
+    """
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    
+    if not expense.raw_expense_id:
+        raise HTTPException(status_code=400, detail="Expense has no associated raw expense and cannot be requeued")
+    
+    # Delete the expense record to free up the raw expense
+    db.delete(expense)
+    db.commit()
+    
+    return {"message": "Expense sent back to queue successfully"}

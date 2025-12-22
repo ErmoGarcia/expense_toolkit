@@ -2,7 +2,6 @@ from .bank_account import BankAccount
 from .category import Category
 from .expense import Expense, RawExpense
 from .merchant import MerchantAlias
-from .periodic_expense import PeriodicExpense
 from .tag import Tag, ExpenseTag
 from .import_history import ImportHistory
 from .notification import RawNotification
@@ -14,7 +13,6 @@ __all__ = [
     "Expense",
     "RawExpense",
     "MerchantAlias",
-    "PeriodicExpense",
     "Tag",
     "ExpenseTag",
     "ImportHistory",
