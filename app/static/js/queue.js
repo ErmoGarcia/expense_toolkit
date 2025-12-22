@@ -225,6 +225,11 @@ class QueueProcessor {
         await this.loadSourceOptions();
         await this.loadAllItems();
         await this.updateQueueCount();
+        await this.detectDuplicates();
+        // Re-render to show duplicate icons
+        if (this.queueItems.length > 0) {
+            this.renderListView();
+        }
         this.setupKeyboardNavigation();
         this.setupButtonListeners();
         this.setupFilterListeners();
@@ -832,6 +837,7 @@ class QueueProcessor {
             }
 
             await this.updateQueueCount();
+            await this.detectDuplicates();
 
             if (this.queueItems.length === 0) {
                 this.renderEmptyQueue();
@@ -876,6 +882,7 @@ class QueueProcessor {
             }
 
             await this.updateQueueCount();
+            await this.detectDuplicates();
 
             if (this.queueItems.length === 0) {
                 this.renderEmptyQueue();
@@ -1114,10 +1121,6 @@ class QueueProcessor {
                                 Apply All Active Rules
                                 <div class="tool-description">Automatically process queue items using active rules</div>
                             </button>
-                            <button class="btn btn-info btn-large" onclick="queueProcessor.findDuplicates()">
-                                Find Duplicates
-                                <div class="tool-description">Detect potential duplicate transactions by amount and date</div>
-                            </button>
                         </div>
                     </div>
 
@@ -1166,7 +1169,7 @@ class QueueProcessor {
         }
     }
 
-    async findDuplicates() {
+    async detectDuplicates() {
         try {
             const response = await fetch('/api/queue/find-duplicates');
             const duplicatesData = await response.json();
@@ -1174,21 +1177,12 @@ class QueueProcessor {
             if (response.ok) {
                 this.duplicates = duplicatesData;
                 const duplicateCount = Object.keys(duplicatesData).length;
-                
-                this.closeToolsModal();
-                this.renderListView();
-                
-                if (duplicateCount > 0) {
-                    alert(`Found ${duplicateCount} transaction${duplicateCount > 1 ? 's' : ''} with potential duplicates.\n\nDuplicate items now show a red warning icon.`);
-                } else {
-                    alert('No duplicates found!');
-                }
+                console.log(`Detected ${duplicateCount} item(s) with potential duplicates`, duplicatesData);
             } else {
-                alert('Error finding duplicates: ' + duplicatesData.detail);
+                console.error('Error detecting duplicates:', duplicatesData.detail);
             }
         } catch (error) {
-            console.error('Error finding duplicates:', error);
-            alert('Error finding duplicates: ' + error.message);
+            console.error('Error detecting duplicates:', error);
         }
     }
 
@@ -1580,6 +1574,7 @@ class QueueProcessor {
         }
         
         await this.updateQueueCount();
+        await this.detectDuplicates();
         
         // Show result
         if (errorCount > 0) {
@@ -1848,6 +1843,7 @@ class QueueProcessor {
             // Reset tags and update UI
             this.currentTags = [];
             await this.updateQueueCount();
+            await this.detectDuplicates();
 
             if (this.queueItems.length === 0) {
                 this.renderEmptyQueue();
@@ -1885,6 +1881,7 @@ class QueueProcessor {
 
             this.currentTags = [];
             await this.updateQueueCount();
+            await this.detectDuplicates();
 
             if (this.queueItems.length === 0) {
                 this.renderEmptyQueue();
@@ -2209,6 +2206,7 @@ class QueueProcessor {
 
             this.closeMergeModal();
             await this.updateQueueCount();
+            await this.detectDuplicates();
 
             if (this.queueItems.length === 0) {
                 this.renderEmptyQueue();
