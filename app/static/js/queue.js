@@ -352,7 +352,34 @@ class QueueProcessor {
 
     setupKeyboardNavigation() {
         document.addEventListener('keydown', (e) => {
-            // Ignore if typing in an input field
+            // Always allow Escape key to work, even in input fields
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                
+                // Check viewMode and close appropriate modal or view
+                if (this.viewMode === 'tools') {
+                    this.closeToolsModal();
+                } else if (this.viewMode === 'rules') {
+                    this.closeRulesModal();
+                } else if (this.viewMode === 'create-rule') {
+                    this.closeCreateRuleModal();
+                } else if (this.viewMode === 'bulk') {
+                    this.closeBulkSaveModal();
+                } else if (this.viewMode === 'merge') {
+                    this.closeMergeModal();
+                } else if (this.viewMode === 'detail') {
+                    this.backToList();
+                } else if (document.getElementById('duplicateModal')) {
+                    // Duplicate modal doesn't change viewMode
+                    this.closeDuplicateModal();
+                } else if (this.viewMode === 'list' && this.selectedIds.size > 0) {
+                    // In list view, clear selection if any items are selected
+                    this.clearSelection();
+                }
+                return;
+            }
+
+            // Ignore other keys if typing in an input field
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
                 return;
             }
@@ -497,10 +524,8 @@ class QueueProcessor {
             e.preventDefault();
             // Space: toggle selection of current item
             this.toggleSelection(this.queueItems[this.selectedIndex].id);
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            this.clearSelection();
         } else if (e.key === 'x' && this.selectedIds.size > 0) {
+            // Escape is handled in setupKeyboardNavigation
             e.preventDefault();
             this.discardSelected();
         } else if (e.key === 's' && this.selectedIds.size > 0) {
@@ -522,10 +547,8 @@ class QueueProcessor {
     }
 
     handleDetailKeyboard(e) {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            this.backToList();
-        } else if (e.key === 'x') {
+        // Escape is handled in setupKeyboardNavigation
+        if (e.key === 'x') {
             e.preventDefault();
             this.discardItem();
         } else if (e.key === 'Enter' && e.ctrlKey) {
@@ -548,10 +571,8 @@ class QueueProcessor {
     }
 
     handleBulkKeyboard(e) {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            this.closeBulkSaveModal();
-        } else if (e.key === 't') {
+        // Escape is handled in setupKeyboardNavigation
+        if (e.key === 't') {
             e.preventDefault();
             this.openToolsModal();
         } else if (e.key === 'r') {
@@ -571,6 +592,26 @@ class QueueProcessor {
             }
         }
         this.updateListUI();
+    }
+
+    handleCheckboxClick(event, itemId, index) {
+        event.stopPropagation();
+        event.preventDefault(); // Prevent text selection on shift+click
+        
+        if (event.shiftKey && this.selectedIndex !== null) {
+            // Shift+Click: select range
+            const start = Math.min(this.selectedIndex, index);
+            const end = Math.max(this.selectedIndex, index);
+            for (let i = start; i <= end; i++) {
+                this.selectedIds.add(this.queueItems[i].id);
+            }
+            this.selectedIndex = index;
+            this.updateListUI();
+        } else {
+            // Regular click: toggle selection
+            this.selectedIndex = index;
+            this.toggleSelection(itemId);
+        }
     }
 
     clearSelection() {
@@ -676,7 +717,7 @@ class QueueProcessor {
             <div class="queue-list-item ${index === this.selectedIndex ? 'focused' : ''} ${this.selectedIds.has(item.id) ? 'selected' : ''}" 
                  data-index="${index}"
                  onclick="queueProcessor.handleItemClick(event, ${index})">
-                <div class="queue-item-checkbox">
+                <div class="queue-item-checkbox" onclick="queueProcessor.handleCheckboxClick(event, ${item.id}, ${index})">
                     <span class="checkbox-indicator">${this.selectedIds.has(item.id) ? '✓' : ''}</span>
                 </div>
                 <div class="queue-item-date">${this.formatDate(item.transaction_date)}</div>
@@ -743,10 +784,12 @@ class QueueProcessor {
     handleItemClick(event, index) {
         if (event.ctrlKey || event.metaKey) {
             // Ctrl/Cmd+Click: toggle selection
+            event.preventDefault(); // Prevent text selection
             this.selectedIndex = index;
             this.toggleSelection(this.queueItems[index].id);
         } else if (event.shiftKey) {
             // Shift+Click: select range
+            event.preventDefault(); // Prevent text selection
             const start = Math.min(this.selectedIndex, index);
             const end = Math.max(this.selectedIndex, index);
             for (let i = start; i <= end; i++) {
@@ -2181,10 +2224,7 @@ class QueueProcessor {
     }
 
     handleMergeModalKeyboard(e) {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            this.closeMergeModal();
-        }
+        // Escape is handled in setupKeyboardNavigation
     }
 
     openDuplicateModal(rawExpenseId) {
