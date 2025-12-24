@@ -89,6 +89,8 @@ async def get_suggestions(raw_expense_id: int, db: Session = Depends(get_db)):
     - merchant_alias: If a merchant with the same raw_name exists
     - category_id: If all expenses for that merchant have the same category
     - tags: If all expenses for that merchant have the same tags
+    - type: If all expenses for that merchant have the same type
+    - description: If all expenses for that merchant have the same description
     """
     # Get the raw expense
     raw_expense = db.query(RawExpense).filter(RawExpense.id == raw_expense_id).first()
@@ -98,7 +100,9 @@ async def get_suggestions(raw_expense_id: int, db: Session = Depends(get_db)):
     suggestions = {
         "merchant_alias": None,
         "category_id": None,
-        "tags": []
+        "tags": [],
+        "type": None,
+        "description": None
     }
     
     # Check if there's a merchant alias with this raw name
@@ -117,9 +121,19 @@ async def get_suggestions(raw_expense_id: int, db: Session = Depends(get_db)):
             
             if expenses:
                 # Check if all expenses have the same category
-                category_ids = set(exp.category_id for exp in expenses if exp.category_id)
+                category_ids = set(exp.category_id for exp in expenses if exp.category_id is not None)
                 if len(category_ids) == 1:
                     suggestions["category_id"] = category_ids.pop()
+                
+                # Check if all expenses have the same type
+                types = set(exp.type for exp in expenses if exp.type is not None)
+                if len(types) == 1:
+                    suggestions["type"] = types.pop()
+                
+                # Check if all expenses have the same description
+                descriptions = set(exp.description for exp in expenses if exp.description is not None)
+                if len(descriptions) == 1:
+                    suggestions["description"] = descriptions.pop()
                 
                 # Check if all expenses have the same tags
                 # Get tags for each expense

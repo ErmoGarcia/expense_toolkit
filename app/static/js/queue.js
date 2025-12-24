@@ -1608,6 +1608,16 @@ class QueueProcessor {
                 document.getElementById('categorySelect').value = suggestions.category_id;
             }
 
+            // Apply description suggestion
+            if (suggestions.description) {
+                document.getElementById('description').value = suggestions.description;
+            }
+
+            // Apply expense type suggestion
+            if (suggestions.type) {
+                document.getElementById('expenseType').value = suggestions.type;
+            }
+
             // Apply tags suggestions
             if (suggestions.tags && suggestions.tags.length > 0) {
                 this.currentTags = [...suggestions.tags];
