@@ -798,8 +798,8 @@ class QueueProcessor {
             </div>
         `;
 
-        // Focus the list for keyboard navigation
-        document.getElementById('queueList').focus();
+        // Focus the list for keyboard navigation (without scrolling)
+        document.getElementById('queueList').focus({ preventScroll: true });
         this.updateListUI();
     }
 

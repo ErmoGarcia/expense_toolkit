@@ -174,7 +174,9 @@ class ExpenseUpdate(BaseModel):
     notes: Optional[str] = Field(None, max_length=2000)
     type: Optional[str] = Field(None, pattern=r"^(fixed|necessary variable|discretionary)$")
     is_recurring: Optional[bool] = None
-    # Explicitly NOT allowing: id, raw_expense_id, amount, transaction_date, created_at, etc.
+    amount: Optional[float] = None
+    transaction_date: Optional[date] = None
+    # Explicitly NOT allowing: id, raw_expense_id, created_at, etc.
 
 
 class MerchantAliasInfo(BaseModel):

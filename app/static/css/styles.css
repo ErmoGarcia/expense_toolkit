@@ -371,11 +371,32 @@ body {
     border-collapse: collapse;
 }
 
+#expensesContent {
+    overflow-x: auto;
+}
+
 .expenses-table th,
 .expenses-table td {
-    padding: 0.75rem 1.5rem;
+    padding: 0.5rem 0.75rem;
     text-align: left;
     border-bottom: 1px solid #e9ecef;
+}
+
+.expenses-table tbody tr {
+    border-left: 4px solid transparent;
+    transition: border-left-color 0.2s;
+}
+
+.expenses-table tbody tr.expense-type-discretionary {
+    border-left-color: #ff9800;
+}
+
+.expenses-table tbody tr.expense-type-fixed {
+    border-left-color: #9c27b0;
+}
+
+.expenses-table tbody tr.expense-type-necessary {
+    border-left-color: #ffc107;
 }
 
 .expenses-table th {
@@ -401,8 +422,25 @@ body {
     color: #495057;
     padding: 0.2rem 0.5rem;
     border-radius: 12px;
-    font-size: 0.8rem;
-    margin-right: 0.5rem;
+    font-size: 0.75rem;
+    display: block;
+    margin-bottom: 0.25rem;
+    width: fit-content;
+}
+
+.expense-tag:last-child {
+    margin-bottom: 0;
+}
+
+.expense-tags-cell {
+    max-width: 150px;
+}
+
+.expenses-table tbody td:nth-child(3) {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Queue Processing */
@@ -1899,85 +1937,44 @@ input:checked+.slider:before {
     align-items: center;
 }
 
-/* Expense Actions Menu */
+/* Expense Actions Icons */
 .expense-actions {
-    position: relative;
     text-align: center;
+    white-space: nowrap;
+    padding: 0.25rem 0.5rem !important;
 }
 
-.expense-menu {
-    position: relative;
-    display: inline-block;
-}
-
-.expense-menu-btn {
+.action-icon-btn {
     background: none;
     border: none;
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
-    font-size: 1.25rem;
-    color: #6c757d;
-    transition: color 0.2s, background-color 0.2s;
-    border-radius: 4px;
-    line-height: 1;
-}
-
-.expense-menu-btn:hover {
-    background-color: #f8f9fa;
-    color: #333;
-}
-
-.three-dots {
-    display: inline-block;
-    font-weight: bold;
-}
-
-.expense-menu-dropdown {
-    display: none;
-    position: absolute;
-    right: 0;
-    top: 100%;
-    background: white;
-    border: 1px solid #e9ecef;
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    min-width: 160px;
-    z-index: 1000;
-    margin-top: 0.25rem;
-}
-
-.expense-menu-dropdown.show {
-    display: block;
-}
-
-.expense-menu-dropdown .menu-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    padding: 0.625rem 1rem;
-    border: none;
-    background: none;
-    text-align: left;
-    cursor: pointer;
-    font-size: 0.9rem;
-    color: #333;
-    transition: background-color 0.15s;
-}
-
-.expense-menu-dropdown .menu-item:hover {
-    background-color: #f8f9fa;
-}
-
-.expense-menu-dropdown .menu-item:first-child {
-    border-radius: 4px 4px 0 0;
-}
-
-.expense-menu-dropdown .menu-item:last-child {
-    border-radius: 0 0 4px 4px;
-}
-
-.menu-icon {
+    padding: 0.25rem;
     font-size: 1rem;
     color: #6c757d;
+    transition: color 0.2s, background-color 0.2s, transform 0.1s;
+    border-radius: 4px;
+    line-height: 1;
+    margin: 0 0.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    vertical-align: middle;
+}
+
+.action-icon-btn:hover {
+    background-color: #f8f9fa;
+    color: #333;
+    transform: scale(1.1);
+}
+
+.action-icon-btn.delete-btn:hover {
+    background-color: #ffe5e5;
+    color: #dc3545;
+}
+
+.action-icon {
+    display: inline-block;
+    pointer-events: none;
 }

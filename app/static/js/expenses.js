@@ -106,24 +106,24 @@ class ExpenseManager {
         const select = document.getElementById(selectId);
         const currentValue = select.value;
         const firstOption = select.querySelector('option');
-        
+
         // Clear existing options except the first one
         select.innerHTML = '';
         if (firstOption) {
             select.appendChild(firstOption);
         }
-        
+
         // Sort categories: parents first, then children
         const parents = categories.filter(cat => !cat.parent_id);
         const children = categories.filter(cat => cat.parent_id);
-        
+
         // Add parent categories
         parents.forEach(parent => {
             const option = document.createElement('option');
             option.value = parent.id;
             option.textContent = parent.name;  // textContent is safe from XSS
             select.appendChild(option);
-            
+
             // Add children of this parent
             const parentChildren = children.filter(child => child.parent_id === parent.id);
             parentChildren.forEach(child => {
@@ -133,7 +133,7 @@ class ExpenseManager {
                 select.appendChild(childOption);
             });
         });
-        
+
         select.value = currentValue;
     }
 
@@ -141,20 +141,20 @@ class ExpenseManager {
         const select = document.getElementById(selectId);
         const currentValue = select.value;
         const firstOption = select.querySelector('option');
-        
+
         // Clear existing options except the first one
         select.innerHTML = '';
         if (firstOption) {
             select.appendChild(firstOption);
         }
-        
+
         items.forEach(item => {
             const option = document.createElement('option');
             option.value = item[valueField];
             option.textContent = item[textField];  // textContent is safe from XSS
             select.appendChild(option);
         });
-        
+
         select.value = currentValue;
     }
 
@@ -184,7 +184,7 @@ class ExpenseManager {
 
     renderExpenses(expenses) {
         const container = document.getElementById('expensesContent');
-        
+
         if (expenses.length === 0) {
             container.innerHTML = `
                 <div style="text-align: center; padding: 2rem; color: #6c757d;">
@@ -200,12 +200,11 @@ class ExpenseManager {
                     <tr>
                         <th>Date</th>
                         <th>Merchant</th>
-                        <th>Description</th>
+                        <th style="width: 250px;">Description</th>
                         <th>Category</th>
                         <th>Amount</th>
                         <th>Tags</th>
-                        <th></th>
-                        <th style="width: 40px;"></th>
+                        <th style="width: 120px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -224,19 +223,24 @@ class ExpenseManager {
         const amount = parseFloat(expense.amount);
         const isNegative = amount < 0;
         const expenseType = expense.type || '';
-        
-        // Safely render tags
+
+        // Safely render tags vertically
         const tagsHtml = (expense.tags || []).map(tag =>
             `<span class="expense-tag">#${escapeHtml(tag.name)}</span>`
         ).join('');
-        
-        // Type badge
-        const typeHtml = expenseType 
-            ? `<span class="type-badge type-${escapeAttr(expenseType.replace(' ', '-'))}">${escapeHtml(expenseType)}</span>` 
-            : '';
-        
+
+        // Determine type class for row border color
+        let typeClass = '';
+        if (expenseType === 'discretionary') {
+            typeClass = 'expense-type-discretionary';
+        } else if (expenseType === 'fixed') {
+            typeClass = 'expense-type-fixed';
+        } else if (expenseType === 'necessary variable') {
+            typeClass = 'expense-type-necessary';
+        }
+
         return `
-            <tr>
+            <tr class="${typeClass}">
                 <td>${escapeHtml(this.formatDate(expense.transaction_date))}</td>
                 <td>
                     ${escapeHtml(merchantName)}
@@ -247,20 +251,17 @@ class ExpenseManager {
                 <td class="expense-amount ${isNegative ? 'negative' : 'positive'}">
                     ${formatCurrency(amount, expense.currency || 'GBP')}
                 </td>
-                <td>${tagsHtml}</td>
-                <td class="expense-indicator">${typeHtml}</td>
+                <td class="expense-tags-cell">${tagsHtml}</td>
                 <td class="expense-actions">
-                    <div class="expense-menu">
-                        <button class="expense-menu-btn" onclick="expenseManager.toggleMenu(event, ${parseInt(expense.id)})" aria-label="Actions">
-                            <span class="three-dots">&#8942;</span>
-                        </button>
-                        <div class="expense-menu-dropdown" id="menu-${parseInt(expense.id)}">
-                            <button onclick="expenseManager.requeueExpense(${parseInt(expense.id)}, ${expense.raw_expense_id ? parseInt(expense.raw_expense_id) : 'null'})" class="menu-item">
-                                <span class="menu-icon">&#8617;</span>
-                                Send to Queue
-                            </button>
-                        </div>
-                    </div>
+                    <button class="action-icon-btn" onclick="expenseManager.requeueExpense(${parseInt(expense.id)}, ${expense.raw_expense_id ? parseInt(expense.raw_expense_id) : 'null'})" title="Send to Queue" aria-label="Send to Queue">
+                        <span class="action-icon">&#8617;</span>
+                    </button>
+                    <button class="action-icon-btn" onclick="expenseManager.openEditModal(${parseInt(expense.id)})" title="Edit Expense" aria-label="Edit Expense">
+                        <span class="action-icon">&#9998;</span>
+                    </button>
+                    <button class="action-icon-btn delete-btn" onclick="expenseManager.deleteExpense(${parseInt(expense.id)})" title="Delete Expense" aria-label="Delete Expense">
+                        <span class="action-icon">&#128465;</span>
+                    </button>
                 </td>
             </tr>
         `;
@@ -276,19 +277,19 @@ class ExpenseManager {
 
     updatePagination(data) {
         const totalPages = Math.ceil(data.total / this.pageSize);
-        
-        document.getElementById('pageInfo').textContent = 
+
+        document.getElementById('pageInfo').textContent =
             `Page ${this.currentPage} of ${totalPages}`;
-        
+
         document.getElementById('prevBtn').disabled = this.currentPage <= 1;
         document.getElementById('nextBtn').disabled = this.currentPage >= totalPages;
     }
 
     updateTotal(expenses) {
-        const total = expenses.reduce((sum, expense) => 
+        const total = expenses.reduce((sum, expense) =>
             sum + parseFloat(expense.amount), 0);
-        
-        document.getElementById('totalAmount').textContent = 
+
+        document.getElementById('totalAmount').textContent =
             `Total: ${formatCurrency(total)}`;
     }
 
@@ -317,14 +318,14 @@ class ExpenseManager {
                 const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Failed to load expense details');
             }
-            
+
             const expense = await response.json();
-            
+
             if (!expense.child_expenses || expense.child_expenses.length === 0) {
                 showToast('No child expenses found for this group.', 'info');
                 return;
             }
-            
+
             this.renderGroupModal(expense);
         } catch (error) {
             console.error('Error loading group details:', error);
@@ -335,7 +336,7 @@ class ExpenseManager {
     renderGroupModal(expense) {
         const childExpenses = expense.child_expenses || [];
         const totalAmount = parseFloat(expense.amount);
-        
+
         const modalHtml = `
             <div class="modal-overlay" id="groupDetailsModal" onclick="expenseManager.handleModalClick(event)">
                 <div class="modal-content large-modal" onclick="event.stopPropagation()">
@@ -413,16 +414,16 @@ class ExpenseManager {
                 </div>
             </div>
         `;
-        
+
         // Remove any existing modal
         this.closeGroupModal();
-        
+
         // Add modal to body
         const modalContainer = document.createElement('div');
         modalContainer.id = 'groupModalContainer';
         modalContainer.innerHTML = modalHtml;
         document.body.appendChild(modalContainer);
-        
+
         // Add keyboard listener for Escape
         document.addEventListener('keydown', this.handleModalKeydown);
     }
@@ -439,9 +440,9 @@ class ExpenseManager {
                     ${formatCurrency(childAmount, child.currency || 'GBP')}
                 </td>
                 <td>
-                    ${(child.tags || []).map(tag => 
-                        `<span class="expense-tag">#${escapeHtml(tag.name)}</span>`
-                    ).join('')}
+                    ${(child.tags || []).map(tag =>
+            `<span class="expense-tag">#${escapeHtml(tag.name)}</span>`
+        ).join('')}
                 </td>
             </tr>
         `;
@@ -467,30 +468,168 @@ class ExpenseManager {
         document.removeEventListener('keydown', this.handleModalKeydown);
     }
 
-    toggleMenu(event, expenseId) {
-        event.stopPropagation();
-        
-        // Close all other open menus
-        document.querySelectorAll('.expense-menu-dropdown').forEach(menu => {
-            if (menu.id !== `menu-${expenseId}`) {
-                menu.classList.remove('show');
+    async openEditModal(expenseId) {
+        try {
+            const response = await fetch(`/api/expenses/${expenseId}`);
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Failed to load expense details');
             }
-        });
-        
-        // Toggle this menu
-        const menu = document.getElementById(`menu-${expenseId}`);
-        menu.classList.toggle('show');
-        
-        // Close menu when clicking outside
-        const closeMenu = (e) => {
-            if (!e.target.closest('.expense-menu')) {
-                menu.classList.remove('show');
-                document.removeEventListener('click', closeMenu);
+
+            const expense = await response.json();
+            this.renderEditModal(expense);
+        } catch (error) {
+            console.error('Error loading expense for edit:', error);
+            showToast('Error loading expense: ' + error.message, 'error');
+        }
+    }
+
+    renderEditModal(expense) {
+        const modalHtml = `
+            <div class="modal-overlay" id="editExpenseModal" onclick="expenseManager.handleEditModalClick(event)">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Edit Expense</h2>
+                        <button class="modal-close" onclick="expenseManager.closeEditModal()">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <form id="editExpenseForm">
+                            <div class="form-group">
+                                <label for="editMerchant">Merchant</label>
+                                <input type="text" id="editMerchant" value="${escapeHtml(expense.merchant_alias?.display_name || '')}" disabled>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="editDescription">Description</label>
+                                <textarea id="editDescription" rows="2">${escapeHtml(expense.description || '')}</textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="editCategory">Category</label>
+                                <select id="editCategory">
+                                    <option value="">Select Category</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="editAmount">Amount</label>
+                                <input type="number" id="editAmount" step="0.01" value="${parseFloat(expense.amount)}">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="editDate">Date</label>
+                                <input type="date" id="editDate" value="${expense.transaction_date}">
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="expenseManager.closeEditModal()">
+                            Cancel
+                        </button>
+                        <button type="button" class="btn btn-primary" onclick="expenseManager.saveExpense(${parseInt(expense.id)})">
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove any existing modal
+        this.closeEditModal();
+
+        // Add modal to body
+        const modalContainer = document.createElement('div');
+        modalContainer.id = 'editModalContainer';
+        modalContainer.innerHTML = modalHtml;
+        document.body.appendChild(modalContainer);
+
+        // Populate category dropdown
+        this.populateCategorySelect('editCategory', this.categories);
+        document.getElementById('editCategory').value = expense.category?.id || '';
+
+        // Add keyboard listener for Escape
+        document.addEventListener('keydown', this.handleEditModalKeydown);
+    }
+
+    handleEditModalClick(event) {
+        if (event.target.id === 'editExpenseModal') {
+            this.closeEditModal();
+        }
+    }
+
+    handleEditModalKeydown = (event) => {
+        if (event.key === 'Escape') {
+            this.closeEditModal();
+        }
+    }
+
+    closeEditModal() {
+        const modalContainer = document.getElementById('editModalContainer');
+        if (modalContainer) {
+            modalContainer.remove();
+        }
+        document.removeEventListener('keydown', this.handleEditModalKeydown);
+    }
+
+    async saveExpense(expenseId) {
+        try {
+            const description = document.getElementById('editDescription').value;
+            const categoryId = document.getElementById('editCategory').value;
+            const amount = parseFloat(document.getElementById('editAmount').value);
+            const date = document.getElementById('editDate').value;
+
+            const response = await fetch(`/api/expenses/${expenseId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    description: description,
+                    category_id: categoryId ? parseInt(categoryId) : null,
+                    amount: amount,
+                    transaction_date: date
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Failed to update expense');
             }
-        };
-        
-        if (menu.classList.contains('show')) {
-            setTimeout(() => document.addEventListener('click', closeMenu), 0);
+
+            showToast('Expense updated successfully!', 'success');
+            this.closeEditModal();
+            await this.loadExpenses();
+        } catch (error) {
+            console.error('Error updating expense:', error);
+            showToast('Error: ' + error.message, 'error');
+        }
+    }
+
+    async deleteExpense(expenseId) {
+        if (!confirm('Are you sure you want to delete this expense? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/expenses/${expenseId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Failed to delete expense');
+            }
+
+            showToast('Expense deleted successfully!', 'success');
+            await this.loadExpenses();
+        } catch (error) {
+            console.error('Error deleting expense:', error);
+            showToast('Error: ' + error.message, 'error');
         }
     }
 
@@ -518,7 +657,7 @@ class ExpenseManager {
             }
 
             showToast('Expense sent back to queue successfully!', 'success');
-            
+
             // Reload the expenses and update queue count
             await this.loadExpenses();
             await this.updateQueueCount();
