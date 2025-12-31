@@ -80,14 +80,15 @@ class CategoryManager {
         try {
             const response = await fetch('/api/categories');
             if (!response.ok) {
-                throw new Error('Failed to load categories');
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Failed to load categories');
             }
             
             this.categories = await response.json();
             this.renderCategories();
         } catch (error) {
             console.error('Error loading categories:', error);
-            this.renderError('Failed to load categories');
+            this.renderError('Failed to load categories: ' + escapeHtml(error.message));
         }
     }
 
@@ -102,7 +103,7 @@ class CategoryManager {
         if (filteredCategories.length === 0) {
             container.innerHTML = `
                 <div style="text-align: center; padding: 2rem; color: #6c757d;">
-                    No ${this.activeTab} categories found. Click "Add Category" to create one.
+                    No ${escapeHtml(this.activeTab)} categories found. Click "Add Category" to create one.
                 </div>
             `;
             return;
@@ -148,28 +149,31 @@ class CategoryManager {
         let html = '';
         
         for (const category of categories) {
-            const indent = level > 0 ? '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(level) + '↳ ' : '';
+            const indent = level > 0 ? '&nbsp;&nbsp;&nbsp;&nbsp;'.repeat(level) + '&#8627; ' : '';
             const parentName = category.parent_id 
                 ? this.categories.find(c => c.id === category.parent_id)?.name || '-'
                 : '-';
             
+            // Validate color is a valid hex color to prevent injection
+            const safeColor = this.isValidHexColor(category.color) ? category.color : '#cccccc';
+            
             html += `
                 <tr>
-                    <td>${indent}${category.name}</td>
-                    <td>${parentName}</td>
+                    <td>${indent}${escapeHtml(category.name)}</td>
+                    <td>${escapeHtml(parentName)}</td>
                     <td>
                         ${category.color ? `
                             <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                <div style="width: 30px; height: 20px; background-color: ${category.color}; border: 1px solid #ccc; border-radius: 4px;"></div>
-                                <span style="color: #6c757d; font-size: 0.9rem;">${category.color}</span>
+                                <div style="width: 30px; height: 20px; background-color: ${safeColor}; border: 1px solid #ccc; border-radius: 4px;"></div>
+                                <span style="color: #6c757d; font-size: 0.9rem;">${escapeHtml(category.color)}</span>
                             </div>
                         ` : '<span style="color: #6c757d;">-</span>'}
                     </td>
-                    <td>${category.icon ? `<span style="font-size: 1.5rem;">${category.icon}</span>` : '<span style="color: #6c757d;">-</span>'}</td>
-                    <td>${this.formatDate(category.created_at)}</td>
+                    <td>${category.icon ? `<span style="font-size: 1.5rem;">${escapeHtml(category.icon)}</span>` : '<span style="color: #6c757d;">-</span>'}</td>
+                    <td>${escapeHtml(this.formatDate(category.created_at))}</td>
                     <td>
-                        <button class="btn btn-small btn-primary" onclick="categoryManager.editCategory(${category.id})">Edit</button>
-                        <button class="btn btn-small btn-danger" onclick="categoryManager.deleteCategory(${category.id})">Delete</button>
+                        <button class="btn btn-small btn-primary" onclick="categoryManager.editCategory(${parseInt(category.id)})">Edit</button>
+                        <button class="btn btn-small btn-danger" onclick="categoryManager.deleteCategory(${parseInt(category.id)})">Delete</button>
                     </td>
                 </tr>
             `;
@@ -183,10 +187,15 @@ class CategoryManager {
         return html;
     }
 
+    isValidHexColor(color) {
+        if (!color) return false;
+        return /^#[0-9A-Fa-f]{6}$/.test(color);
+    }
+
     renderError(message) {
         document.getElementById('categoriesContent').innerHTML = `
             <div style="text-align: center; padding: 2rem; color: #dc3545;">
-                ${message}
+                ${escapeHtml(message)}
             </div>
         `;
     }
@@ -200,9 +209,9 @@ class CategoryManager {
             // Edit mode
             this.currentCategoryId = category.id;
             modalTitle.textContent = 'Edit Category';
-            document.getElementById('categoryName').value = category.name;
+            document.getElementById('categoryName').value = category.name || '';
             document.getElementById('categoryType').value = category.category_type || 'expense';
-            document.getElementById('categoryColor').value = category.color || '#007bff';
+            document.getElementById('categoryColor').value = this.isValidHexColor(category.color) ? category.color : '#007bff';
             document.getElementById('categoryIcon').value = category.icon || '';
             
             // Update parent options first, then set value
@@ -241,7 +250,7 @@ class CategoryManager {
         availableParents.forEach(cat => {
             const option = document.createElement('option');
             option.value = cat.id;
-            option.textContent = cat.name;
+            option.textContent = cat.name;  // textContent is safe from XSS
             parentSelect.appendChild(option);
         });
     }
@@ -261,7 +270,12 @@ class CategoryManager {
         const icon = document.getElementById('categoryIcon').value.trim();
 
         if (!name) {
-            alert('Please enter a category name');
+            showToast('Please enter a category name', 'warning');
+            return;
+        }
+
+        if (name.length > 100) {
+            showToast('Category name must be 100 characters or less', 'warning');
             return;
         }
 
@@ -297,15 +311,16 @@ class CategoryManager {
             }
 
             if (!response.ok) {
-                const error = await response.json();
+                const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Failed to save category');
             }
 
             this.hideModal();
             await this.loadCategories();
+            showToast('Category saved successfully', 'success');
         } catch (error) {
             console.error('Error saving category:', error);
-            alert('Error saving category: ' + error.message);
+            showToast('Error saving category: ' + error.message, 'error');
         }
     }
 
@@ -330,20 +345,24 @@ class CategoryManager {
             });
 
             if (!response.ok) {
-                const error = await response.json();
+                const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Failed to delete category');
             }
 
             await this.loadCategories();
+            showToast('Category deleted successfully', 'success');
         } catch (error) {
             console.error('Error deleting category:', error);
-            alert('Error deleting category: ' + error.message);
+            showToast('Error deleting category: ' + error.message, 'error');
         }
     }
 
     async updateQueueCount() {
         try {
             const response = await fetch('/api/queue/count');
+            if (!response.ok) {
+                throw new Error('Failed to load queue count');
+            }
             const data = await response.json();
             document.getElementById('queueCount').textContent = data.count || 0;
         } catch (error) {

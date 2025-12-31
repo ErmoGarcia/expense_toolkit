@@ -74,7 +74,14 @@ class ImportManager {
         const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
         
         if (!validExtensions.includes(fileExtension)) {
-            alert('Invalid file type. Please select an Excel (.xlsx, .xls) or CSV file.');
+            showToast('Invalid file type. Please select an Excel (.xlsx, .xls) or CSV file.', 'warning');
+            return;
+        }
+        
+        // Check file size (10MB limit)
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxSize) {
+            showToast('File is too large. Maximum size is 10MB.', 'warning');
             return;
         }
         
@@ -97,7 +104,7 @@ class ImportManager {
         e.preventDefault();
         
         if (!this.selectedFileData) {
-            alert('Please select a file first.');
+            showToast('Please select a file first.', 'warning');
             return;
         }
         
@@ -119,19 +126,19 @@ class ImportManager {
             });
             
             if (!response.ok) {
-                const error = await response.json();
+                const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Upload failed');
             }
             
             const result = await response.json();
-            alert(`File uploaded successfully!\nStored as: ${result.stored_filename}\nStatus: ${result.status}`);
+            showToast(`File uploaded successfully! Status: ${result.status}`, 'success');
             
             this.clearFile();
             await this.loadImportHistory();
             
         } catch (error) {
             console.error('Upload error:', error);
-            alert(`Upload failed: ${error.message}`);
+            showToast(`Upload failed: ${error.message}`, 'error');
         } finally {
             this.uploadBtn.disabled = false;
             this.uploadBtn.textContent = 'Upload File';
@@ -141,17 +148,22 @@ class ImportManager {
     async loadBankAccounts() {
         try {
             const response = await fetch('/api/import/bank-accounts');
+            if (!response.ok) {
+                throw new Error('Failed to load bank accounts');
+            }
             const accounts = await response.json();
             
             this.bankAccountSelect.innerHTML = '<option value="">Select account...</option>';
             accounts.forEach(account => {
                 const option = document.createElement('option');
                 option.value = account.id;
+                // textContent is safe from XSS
                 option.textContent = `${account.name} (${account.bank_name || 'Unknown bank'})`;
                 this.bankAccountSelect.appendChild(option);
             });
         } catch (error) {
             console.error('Error loading bank accounts:', error);
+            showToast('Failed to load bank accounts', 'error');
         }
     }
     
@@ -160,6 +172,9 @@ class ImportManager {
         
         try {
             const response = await fetch('/api/import/history');
+            if (!response.ok) {
+                throw new Error('Failed to load import history');
+            }
             const history = await response.json();
             
             if (history.length === 0) {
@@ -187,13 +202,16 @@ class ImportManager {
             container.innerHTML = '';
             container.appendChild(table);
             
-            // Add event listeners for action buttons
-            container.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => this.deleteImport(e.target.dataset.id));
-            });
-            
-            container.querySelectorAll('.process-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => this.processImport(e.target.dataset.id));
+            // Add event listeners for action buttons using event delegation
+            container.addEventListener('click', (e) => {
+                const deleteBtn = e.target.closest('.delete-btn');
+                const processBtn = e.target.closest('.process-btn');
+                
+                if (deleteBtn) {
+                    this.deleteImport(deleteBtn.dataset.id);
+                } else if (processBtn) {
+                    this.processImport(processBtn.dataset.id);
+                }
             });
             
             // Show/hide process all button based on pending imports
@@ -214,18 +232,18 @@ class ImportManager {
             : '-';
         
         const processBtn = item.status === 'pending' 
-            ? `<button class="btn btn-primary btn-small process-btn" data-id="${item.id}">Process</button>`
+            ? `<button class="btn btn-primary btn-small process-btn" data-id="${parseInt(item.id)}">Process</button>`
             : '';
         
         return `
             <tr>
-                <td>${item.filename}</td>
-                <td><span class="status-badge ${statusClass}">${item.status}</span></td>
-                <td>${records}</td>
-                <td>${date}</td>
+                <td>${escapeHtml(item.filename)}</td>
+                <td><span class="status-badge ${statusClass}">${escapeHtml(item.status)}</span></td>
+                <td>${escapeHtml(records)}</td>
+                <td>${escapeHtml(date)}</td>
                 <td>
                     ${processBtn}
-                    <button class="btn btn-danger btn-small delete-btn" data-id="${item.id}">
+                    <button class="btn btn-danger btn-small delete-btn" data-id="${parseInt(item.id)}">
                         Delete
                     </button>
                 </td>
@@ -254,13 +272,15 @@ class ImportManager {
             });
             
             if (!response.ok) {
-                throw new Error('Delete failed');
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Delete failed');
             }
             
+            showToast('Import record deleted', 'success');
             await this.loadImportHistory();
         } catch (error) {
             console.error('Delete error:', error);
-            alert('Failed to delete import record');
+            showToast('Failed to delete import record: ' + error.message, 'error');
         }
     }
     
@@ -277,19 +297,19 @@ class ImportManager {
             });
             
             if (!response.ok) {
-                const error = await response.json();
+                const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Processing failed');
             }
             
             const result = await response.json();
-            alert(`Import processed successfully!\nBank: ${result.bank_name}\nRecords imported: ${result.records_imported}\nRecords skipped: ${result.records_skipped}`);
+            showToast(`Import processed: ${result.records_imported} imported, ${result.records_skipped} skipped`, 'success');
             
             await this.loadImportHistory();
             await this.updateQueueCount();
             
         } catch (error) {
             console.error('Process error:', error);
-            alert(`Processing failed: ${error.message}`);
+            showToast(`Processing failed: ${error.message}`, 'error');
             await this.loadImportHistory();
         }
     }
@@ -308,29 +328,27 @@ class ImportManager {
             });
             
             if (!response.ok) {
-                const error = await response.json();
+                const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Processing failed');
             }
             
             const result = await response.json();
             
-            let message = `Processed ${result.results.length} imports:\n\n`;
-            result.results.forEach(r => {
-                if (r.status === 'completed') {
-                    message += `${r.filename}: ${r.records_imported} imported, ${r.records_skipped} skipped\n`;
-                } else {
-                    message += `${r.filename}: ERROR - ${r.error}\n`;
-                }
-            });
+            const successful = result.results.filter(r => r.status === 'completed').length;
+            const failed = result.results.filter(r => r.status === 'error').length;
             
-            alert(message);
+            if (failed > 0) {
+                showToast(`Processed ${successful} imports, ${failed} failed`, 'warning');
+            } else {
+                showToast(`Successfully processed ${successful} imports`, 'success');
+            }
             
             await this.loadImportHistory();
             await this.updateQueueCount();
             
         } catch (error) {
             console.error('Process all error:', error);
-            alert(`Processing failed: ${error.message}`);
+            showToast(`Processing failed: ${error.message}`, 'error');
         } finally {
             this.processAllBtn.disabled = false;
             this.processAllBtn.textContent = 'Process All Pending';
@@ -340,6 +358,9 @@ class ImportManager {
     async updateQueueCount() {
         try {
             const response = await fetch('/api/queue/count');
+            if (!response.ok) {
+                throw new Error('Failed to load queue count');
+            }
             const data = await response.json();
             const badge = document.getElementById('queueCount');
             if (badge) {

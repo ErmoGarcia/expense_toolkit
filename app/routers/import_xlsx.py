@@ -13,6 +13,9 @@ from ..services.import_service import process_import
 
 router = APIRouter()
 
+# Maximum file size: 10MB
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB in bytes
+
 
 @router.post("/xlsx")
 async def upload_xlsx(
@@ -25,23 +28,40 @@ async def upload_xlsx(
     The file is saved to disk and an import history record is created.
     Actual parsing will be done in a separate step once format is configured.
     """
+    # Validate file is provided
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
     # Validate file extension
     valid_extensions = ('.xlsx', '.xls', '.csv')
-    if not file.filename.lower().endswith(valid_extensions):
+    filename_lower = file.filename.lower()
+    if not filename_lower.endswith(valid_extensions):
         raise HTTPException(
             status_code=400, 
             detail=f"File must be one of: {', '.join(valid_extensions)}"
         )
     
+    # Read file content with size limit
+    content = await file.read()
+    
+    # Check file size
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File size exceeds maximum allowed size of {MAX_FILE_SIZE // (1024 * 1024)}MB"
+        )
+    
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="File is empty")
+    
     # Generate unique filename
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = uuid.uuid4().hex[:8]
-    extension = file.filename.split('.')[-1].lower()
+    extension = file.filename.rsplit('.', 1)[-1].lower()
     stored_filename = f"{timestamp_str}_{unique_id}.{extension}"
     filepath = settings.XLSX_DIR / stored_filename
     
     # Save file to disk
-    content = await file.read()
     with open(filepath, "wb") as f:
         f.write(content)
     
@@ -136,6 +156,9 @@ async def process_import_file(import_id: int, db: Session = Depends(get_db)):
             detail=f"Import already processed (status: {record.status})"
         )
     
+    if not record.stored_filename:
+        raise HTTPException(status_code=400, detail="No stored filename for this import")
+    
     filepath = settings.XLSX_DIR / record.stored_filename
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="Import file not found on disk")
@@ -151,7 +174,8 @@ async def process_import_file(import_id: int, db: Session = Depends(get_db)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+        # Log the error in production
+        raise HTTPException(status_code=500, detail="Processing failed. Please check the file format.")
 
 
 @router.post("/process-all")
@@ -166,6 +190,15 @@ async def process_all_pending(db: Session = Depends(get_db)):
     
     results = []
     for record in pending:
+        if not record.stored_filename:
+            results.append({
+                "id": record.id,
+                "filename": record.filename,
+                "status": "error",
+                "error": "No stored filename"
+            })
+            continue
+            
         filepath = settings.XLSX_DIR / record.stored_filename
         if not filepath.exists():
             results.append({
@@ -191,7 +224,7 @@ async def process_all_pending(db: Session = Depends(get_db)):
                 "id": record.id,
                 "filename": record.filename,
                 "status": "error",
-                "error": str(e)
+                "error": "Processing failed"
             })
     
     return {

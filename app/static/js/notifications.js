@@ -20,6 +20,9 @@ class NotificationManager {
     async updateQueueCount() {
         try {
             const response = await fetch('/api/queue/count');
+            if (!response.ok) {
+                throw new Error('Failed to fetch queue count');
+            }
             const data = await response.json();
             const badge = document.getElementById('queueCount');
             if (badge) {
@@ -48,7 +51,8 @@ class NotificationManager {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to parse notifications');
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Failed to parse notifications');
             }
 
             const data = await response.json();
@@ -61,7 +65,7 @@ class NotificationManager {
             
         } catch (error) {
             console.error('Error parsing notifications:', error);
-            alert('Failed to parse notifications: ' + error.message);
+            showToast('Failed to parse notifications: ' + error.message, 'error');
             statusEl.textContent = 'Error parsing notifications';
         } finally {
             btn.disabled = false;
@@ -123,49 +127,50 @@ class NotificationManager {
         const amount = edited.amount !== undefined ? edited.amount : expense.amount;
         const transactionDate = edited.transaction_date || expense.transaction_date;
 
+        // Build card HTML with proper escaping
         card.innerHTML = `
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
                 <div>
                     <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Merchant</label>
-                    <input type="text" class="merchant-input" value="${this.escapeHtml(merchantName)}" 
+                    <input type="text" class="merchant-input" value="${escapeAttr(merchantName)}" 
                            style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px;"
-                           data-notification-id="${expense.notification_id}">
+                           data-notification-id="${parseInt(expense.notification_id)}">
                 </div>
                 <div>
                     <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Amount</label>
-                    <input type="number" class="amount-input" value="${amount}" step="0.01"
+                    <input type="number" class="amount-input" value="${parseFloat(amount)}" step="0.01"
                            style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px;"
-                           data-notification-id="${expense.notification_id}">
+                           data-notification-id="${parseInt(expense.notification_id)}">
                 </div>
                 <div>
                     <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Date</label>
-                    <input type="date" class="date-input" value="${transactionDate}"
+                    <input type="date" class="date-input" value="${escapeAttr(transactionDate)}"
                            style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px;"
-                           data-notification-id="${expense.notification_id}">
+                           data-notification-id="${parseInt(expense.notification_id)}">
                 </div>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
                 <div>
                     <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Bank Account</label>
-                    <input type="text" class="bank-input" value="${this.escapeHtml(expense.bank_account_name)}" readonly
+                    <input type="text" class="bank-input" value="${escapeAttr(expense.bank_account_name)}" readonly
                            style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px; background: #f8f9fa;">
                 </div>
                 <div>
                     <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Currency</label>
-                    <input type="text" value="${expense.currency}" readonly
+                    <input type="text" value="${escapeAttr(expense.currency)}" readonly
                            style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px; background: #f8f9fa;">
                 </div>
             </div>
             <div style="margin-bottom: 1rem;">
                 <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Description</label>
-                <textarea readonly style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px; background: #f8f9fa; resize: vertical;" rows="2">${this.escapeHtml(expense.raw_description)}</textarea>
+                <textarea readonly style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px; background: #f8f9fa; resize: vertical;" rows="2">${escapeHtml(expense.raw_description)}</textarea>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div style="font-size: 0.875rem; color: #6c757d;">
-                    Pattern: ${expense.pattern_matched}
-                    ${expense.latitude && expense.longitude ? ` | Location: ${expense.latitude.toFixed(6)}, ${expense.longitude.toFixed(6)}` : ''}
+                    Pattern: ${escapeHtml(expense.pattern_matched)}
+                    ${expense.latitude && expense.longitude ? ` | Location: ${parseFloat(expense.latitude).toFixed(6)}, ${parseFloat(expense.longitude).toFixed(6)}` : ''}
                 </div>
-                <button class="btn btn-danger btn-sm remove-expense-btn" data-notification-id="${expense.notification_id}">
+                <button class="btn btn-danger btn-sm remove-expense-btn" data-notification-id="${parseInt(expense.notification_id)}">
                     Remove
                 </button>
             </div>
@@ -209,7 +214,8 @@ class NotificationManager {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to discard notification');
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Failed to discard notification');
             }
 
             // Remove from UI
@@ -226,15 +232,17 @@ class NotificationManager {
             if (this.parsedExpenses.length === 0) {
                 document.getElementById('acceptAllBtn').style.display = 'none';
             }
+            
+            showToast('Notification discarded', 'success');
         } catch (error) {
             console.error('Error discarding notification:', error);
-            alert('Failed to discard notification: ' + error.message);
+            showToast('Failed to discard notification: ' + error.message, 'error');
         }
     }
 
     async acceptAllExpenses() {
         if (this.parsedExpenses.length === 0) {
-            alert('No expenses to accept');
+            showToast('No expenses to accept', 'warning');
             return;
         }
 
@@ -271,7 +279,8 @@ class NotificationManager {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to accept expenses');
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Failed to accept expenses');
             }
 
             const data = await response.json();
@@ -282,6 +291,8 @@ class NotificationManager {
             this.parsedExpenses = [];
             this.editedExpenses.clear();
             this.renderExpensesList();
+            
+            showToast('Expenses saved successfully!', 'success');
             
             // Hide results section after a delay
             setTimeout(() => {
@@ -295,18 +306,12 @@ class NotificationManager {
 
         } catch (error) {
             console.error('Error accepting expenses:', error);
-            alert('Failed to accept expenses: ' + error.message);
+            showToast('Failed to accept expenses: ' + error.message, 'error');
             statusEl.textContent = 'Error saving expenses';
         } finally {
             btn.disabled = false;
             btn.textContent = 'Accept All Expenses';
         }
-    }
-
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
     }
 }
 

@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from ..database import Base
 
 
@@ -17,9 +18,12 @@ class RawNotification(Base):
     source_file = Column(String)  # JSON file where this was saved
     
     # Processing status
-    is_processed = Column(Boolean, default=False)
+    is_processed = Column(Boolean, default=False, index=True)
     is_expense = Column(Boolean)  # null = not determined, True = expense, False = not an expense
-    raw_expense_id = Column(Integer)  # link to created RawExpense if parsed successfully
+    raw_expense_id = Column(Integer, ForeignKey("raw_expenses.id", ondelete="SET NULL"), nullable=True)  # link to created RawExpense if parsed successfully
     parse_error = Column(String)  # error message if parsing failed
     
     received_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    raw_expense = relationship("RawExpense")

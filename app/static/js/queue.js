@@ -69,6 +69,9 @@ class Autocomplete {
     async fetchSuggestions(query) {
         try {
             const response = await fetch(`${this.options.endpoint}?q=${encodeURIComponent(query)}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             this.suggestions = await response.json();
             this.renderSuggestions(query);
         } catch (error) {
@@ -102,7 +105,9 @@ class Autocomplete {
         )) {
             const div = document.createElement('div');
             div.className = 'autocomplete-item create-new';
-            div.innerHTML = `<em>Create "${query}"</em>`;
+            const em = document.createElement('em');
+            em.textContent = `Create "${query}"`;
+            div.appendChild(em);
             div.addEventListener('click', () => this.createNew(query));
             div.addEventListener('mouseenter', () => this.setSelectedIndex(this.suggestions.length));
             this.container.appendChild(div);
@@ -241,6 +246,9 @@ class QueueProcessor {
     async loadCategories() {
         try {
             const response = await fetch('/api/categories');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             this.categories = await response.json();
         } catch (error) {
             console.error('Error loading categories:', error);
@@ -296,19 +304,19 @@ class QueueProcessor {
         
         // Add parent categories
         parents.forEach(parent => {
-            html += `<option value="${parent.id}">${parent.name}</option>`;
+            html += `<option value="${parent.id}">${escapeHtml(parent.name)}</option>`;
             
             // Add children of this parent
             const parentChildren = children.filter(child => child.parent_id === parent.id);
             parentChildren.forEach(child => {
-                html += `<option value="${child.id}">&nbsp;&nbsp;↳ ${child.name}</option>`;
+                html += `<option value="${child.id}">&nbsp;&nbsp;↳ ${escapeHtml(child.name)}</option>`;
             });
         });
         
         // Add orphaned children (if any)
         const orphans = children.filter(child => !parents.find(p => p.id === child.parent_id));
         orphans.forEach(orphan => {
-            html += `<option value="${orphan.id}">${orphan.name}</option>`;
+            html += `<option value="${orphan.id}">${escapeHtml(orphan.name)}</option>`;
         });
         
         return html;
@@ -327,6 +335,9 @@ class QueueProcessor {
             
             const url = '/api/queue/all' + (params.toString() ? '?' + params.toString() : '');
             const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             const data = await response.json();
 
             if (Array.isArray(data) && data.length > 0) {
@@ -484,6 +495,9 @@ class QueueProcessor {
         try {
             // Get all raw expenses to extract unique sources
             const response = await fetch('/api/queue/all');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             const data = await response.json();
             
             if (Array.isArray(data)) {
@@ -728,15 +742,15 @@ class QueueProcessor {
                 <div class="queue-item-checkbox" onclick="queueProcessor.handleCheckboxClick(event, ${item.id}, ${index})">
                     <span class="checkbox-indicator">${this.selectedIds.has(item.id) ? '✓' : ''}</span>
                 </div>
-                <div class="queue-item-date">${this.formatDate(item.transaction_date)}</div>
+                <div class="queue-item-date">${escapeHtml(this.formatDate(item.transaction_date))}</div>
                 <div class="queue-item-merchant">
-                    ${item.raw_merchant_name || 'Unknown'}
+                    ${escapeHtml(item.raw_merchant_name || 'Unknown')}
                     ${hasDuplicate ? `<span class="duplicate-icon" onclick="event.stopPropagation(); queueProcessor.openDuplicateModal(${item.id})" title="Potential duplicate - click to review">⚠️</span>` : ''}
                 </div>
                 <div class="queue-item-amount ${parseFloat(item.amount) < 0 ? 'negative' : 'positive'}">
                     ${parseFloat(item.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(item.amount)).toFixed(2)}
                 </div>
-                <div class="queue-item-source">${item.source}</div>
+                <div class="queue-item-source">${escapeHtml(item.source)}</div>
             </div>
         `;
         }).join('');
@@ -937,8 +951,8 @@ class QueueProcessor {
                             <div class="bulk-items-list">
                                 ${selectedItems.map(item => `
                                     <div class="bulk-item-row">
-                                        <span class="bulk-item-date">${this.formatDate(item.transaction_date)}</span>
-                                        <span class="bulk-item-merchant">${item.raw_merchant_name || 'Unknown'}</span>
+                                        <span class="bulk-item-date">${escapeHtml(this.formatDate(item.transaction_date))}</span>
+                                        <span class="bulk-item-merchant">${escapeHtml(item.raw_merchant_name || 'Unknown')}</span>
                                         <span class="bulk-item-amount ${parseFloat(item.amount) < 0 ? 'negative' : 'positive'}">
                                             ${parseFloat(item.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(item.amount)).toFixed(2)}
                                         </span>
@@ -1076,8 +1090,8 @@ class QueueProcessor {
         const container = document.getElementById('bulkTagsContainer');
         container.innerHTML = this.bulkTags.map(tag => `
             <div class="tag-item">
-                #${tag}
-                <button type="button" class="tag-remove" onclick="queueProcessor.removeBulkTag('${tag}')">×</button>
+                #${escapeHtml(tag)}
+                <button type="button" class="tag-remove" onclick="queueProcessor.removeBulkTag('${escapeJs(tag)}')">×</button>
             </div>
         `).join('');
     }
@@ -1245,7 +1259,7 @@ class QueueProcessor {
         return rules.map(rule => `
             <div class="rule-item ${rule.active ? 'active' : 'inactive'}">
                 <div class="rule-header">
-                    <div class="rule-name">${rule.name}</div>
+                    <div class="rule-name">${escapeHtml(rule.name)}</div>
                     <div class="rule-actions">
                         <label class="switch">
                             <input type="checkbox" ${rule.active ? 'checked' : ''} onchange="queueProcessor.toggleRule(${rule.id}, this.checked)">
@@ -1256,11 +1270,11 @@ class QueueProcessor {
                 </div>
                 <div class="rule-details">
                     <div class="rule-condition">
-                        <strong>Field:</strong> ${rule.field} |
-                        <strong>Match:</strong> ${rule.match_type} "${rule.match_value}"
+                        <strong>Field:</strong> ${escapeHtml(rule.field)} |
+                        <strong>Match:</strong> ${escapeHtml(rule.match_type)} "${escapeHtml(rule.match_value)}"
                     </div>
                     <div class="rule-action">
-                        <strong>Action:</strong> ${rule.action}
+                        <strong>Action:</strong> ${escapeHtml(rule.action)}
                         ${rule.action === 'save' ? this.renderSaveDetails(rule.save_data) : ''}
                     </div>
                 </div>
@@ -1271,11 +1285,11 @@ class QueueProcessor {
     renderSaveDetails(saveData) {
         return `
             <div class="save-details">
-                <div><strong>Merchant:</strong> ${saveData.merchant_name}</div>
-                <div><strong>Category ID:</strong> ${saveData.category_id}</div>
-                ${saveData.description ? `<div><strong>Description:</strong> ${saveData.description}</div>` : ''}
-                ${saveData.tags && saveData.tags.length > 0 ? `<div><strong>Tags:</strong> ${saveData.tags.join(', ')}</div>` : ''}
-                ${saveData.type ? `<div><strong>Type:</strong> ${saveData.type}</div>` : ''}
+                <div><strong>Merchant:</strong> ${escapeHtml(saveData.merchant_name)}</div>
+                <div><strong>Category ID:</strong> ${escapeHtml(String(saveData.category_id))}</div>
+                ${saveData.description ? `<div><strong>Description:</strong> ${escapeHtml(saveData.description)}</div>` : ''}
+                ${saveData.tags && saveData.tags.length > 0 ? `<div><strong>Tags:</strong> ${escapeHtml(saveData.tags.join(', '))}</div>` : ''}
+                ${saveData.type ? `<div><strong>Type:</strong> ${escapeHtml(saveData.type)}</div>` : ''}
             </div>
         `;
     }
@@ -1397,7 +1411,7 @@ class QueueProcessor {
                                      <label for="saveCategory">Category</label>
                                      <select id="saveCategory">
                                          <option value="">Select category</option>
-                                         ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                                         ${this.categories.map(cat => `<option value="${cat.id}">${escapeHtml(cat.name)}</option>`).join('')}
                                      </select>
                                  </div>
 
@@ -1596,6 +1610,9 @@ class QueueProcessor {
 
         try {
             const response = await fetch(`/api/queue/suggestions/${this.currentItem.id}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             const suggestions = await response.json();
 
             // Apply merchant alias suggestion
@@ -1659,12 +1676,12 @@ class QueueProcessor {
             <div class="raw-transaction">
                 <h3>Raw Transaction</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
-                    <div><strong>Date:</strong> ${this.formatDate(item.transaction_date)}</div>
+                    <div><strong>Date:</strong> ${escapeHtml(this.formatDate(item.transaction_date))}</div>
                     <div><strong>Amount:</strong> <span class="expense-amount ${parseFloat(item.amount) < 0 ? 'negative' : 'positive'}">£${Math.abs(parseFloat(item.amount)).toFixed(2)}</span></div>
-                    <div><strong>Merchant:</strong> ${item.raw_merchant_name || 'Unknown'}</div>
-                    <div><strong>Source:</strong> ${item.source}</div>
+                    <div><strong>Merchant:</strong> ${escapeHtml(item.raw_merchant_name || 'Unknown')}</div>
+                    <div><strong>Source:</strong> ${escapeHtml(item.source)}</div>
                 </div>
-                ${item.raw_description ? `<div style="margin-top: 1rem;"><strong>Raw Description:</strong> ${item.raw_description}</div>` : ''}
+                ${item.raw_description ? `<div style="margin-top: 1rem;"><strong>Raw Description:</strong> ${escapeHtml(item.raw_description)}</div>` : ''}
             </div>
 
             <!-- Processing Form -->
@@ -1797,8 +1814,8 @@ class QueueProcessor {
         const container = document.getElementById('tagsContainer');
         container.innerHTML = this.currentTags.map(tag => `
             <div class="tag-item">
-                #${tag}
-                <button type="button" class="tag-remove" onclick="queueProcessor.removeTag('${tag}')">×</button>
+                #${escapeHtml(tag)}
+                <button type="button" class="tag-remove" onclick="queueProcessor.removeTag('${escapeJs(tag)}')">×</button>
             </div>
         `).join('');
     }
@@ -1913,6 +1930,9 @@ class QueueProcessor {
     async updateQueueCount() {
         try {
             const response = await fetch('/api/queue/count');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             const data = await response.json();
             document.getElementById('queueCount').textContent = data.count || 0;
         } catch (error) {
@@ -1924,7 +1944,7 @@ class QueueProcessor {
         document.getElementById('queueContent').innerHTML = `
             <div style="text-align: center; padding: 2rem; color: #dc3545;">
                 <h3>Error</h3>
-                <p>${message}</p>
+                <p>${escapeHtml(message)}</p>
                 <button class="btn btn-primary" onclick="location.reload()">Retry</button>
             </div>
         `;
@@ -1990,7 +2010,7 @@ class QueueProcessor {
                                     <label for="mergeCategorySelect">Category</label>
                                     <select id="mergeCategorySelect" required>
                                         <option value="">Select a category</option>
-                                        ${this.categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('')}
+                                        ${this.categories.map(cat => `<option value="${cat.id}">${escapeHtml(cat.name)}</option>`).join('')}
                                     </select>
                                 </div>
 
@@ -2027,8 +2047,8 @@ class QueueProcessor {
                                 ${selectedItems.map(item => `
                                     <div class="group-child-row" data-id="${item.id}">
                                         <div class="group-child-info">
-                                            <span class="group-child-date">${this.formatDate(item.transaction_date)}</span>
-                                            <span class="group-child-merchant">${item.raw_merchant_name || 'Unknown'}</span>
+                                            <span class="group-child-date">${escapeHtml(this.formatDate(item.transaction_date))}</span>
+                                            <span class="group-child-merchant">${escapeHtml(item.raw_merchant_name || 'Unknown')}</span>
                                             <span class="group-child-amount ${parseFloat(item.amount) < 0 ? 'negative' : 'positive'}">
                                                 ${parseFloat(item.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(item.amount)).toFixed(2)}
                                             </span>
@@ -2140,8 +2160,8 @@ class QueueProcessor {
         const container = document.getElementById('mergeTagsContainer');
         container.innerHTML = this.mergeTags.map(tag => `
             <div class="tag-item">
-                #${tag}
-                <button type="button" class="tag-remove" onclick="queueProcessor.removeMergeTag('${tag}')">×</button>
+                #${escapeHtml(tag)}
+                <button type="button" class="tag-remove" onclick="queueProcessor.removeMergeTag('${escapeJs(tag)}')">×</button>
             </div>
         `).join('');
     }
@@ -2328,13 +2348,13 @@ class QueueProcessor {
             return `
                 <div class="${cardClass}" data-index="${index}" onclick="queueProcessor.focusDuplicateCard(${index})">
                     <div class="duplicate-card-header">
-                        <span class="duplicate-card-type">${headerText}</span>
+                        <span class="duplicate-card-type">${escapeHtml(headerText)}</span>
                         ${isFocused ? '<span class="focus-indicator">●</span>' : ''}
                     </div>
                     <div class="duplicate-card-body">
                         <div class="detail-row">
                             <span class="detail-label">Date:</span>
-                            <span class="detail-value">${this.formatDate(item.transaction_date)}</span>
+                            <span class="detail-value">${escapeHtml(this.formatDate(item.transaction_date))}</span>
                         </div>
                         <div class="detail-row">
                             <span class="detail-label">Amount:</span>
@@ -2344,24 +2364,24 @@ class QueueProcessor {
                         </div>
                         <div class="detail-row">
                             <span class="detail-label">Merchant:</span>
-                            <span class="detail-value">${isSaved ? (item.merchant_alias || 'N/A') : (item.raw_merchant_name || 'Unknown')}</span>
+                            <span class="detail-value">${escapeHtml(isSaved ? (item.merchant_alias || 'N/A') : (item.raw_merchant_name || 'Unknown'))}</span>
                         </div>
                         ${isSaved && item.category ? `
                         <div class="detail-row">
                             <span class="detail-label">Category:</span>
-                            <span class="detail-value">${item.category}</span>
+                            <span class="detail-value">${escapeHtml(item.category)}</span>
                         </div>
                         ` : ''}
                         ${(isSaved ? item.description : item.raw_description) ? `
                         <div class="detail-row">
                             <span class="detail-label">Description:</span>
-                            <span class="detail-value">${isSaved ? item.description : item.raw_description}</span>
+                            <span class="detail-value">${escapeHtml(isSaved ? item.description : item.raw_description)}</span>
                         </div>
                         ` : ''}
                         ${isRaw ? `
                         <div class="detail-row">
                             <span class="detail-label">Source:</span>
-                            <span class="detail-value">${item.source}</span>
+                            <span class="detail-value">${escapeHtml(item.source)}</span>
                         </div>
                         ` : ''}
                     </div>

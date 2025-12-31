@@ -10,8 +10,21 @@ from ..models.merchant import MerchantAlias
 from ..models.category import Category
 from ..models.tag import Tag, ExpenseTag
 from ..models.rule import Rule
+from ..schemas import (
+    ProcessExpenseRequest,
+    ArchiveExpensesRequest,
+    MergeExpensesRequest,
+    QueueCountResponse,
+    ProcessedExpenseResponse,
+    ArchiveResponse,
+    MergeResponse,
+    ApplyRulesResponse
+)
 
 router = APIRouter()
+
+# Maximum allowed limit for pagination
+MAX_LIMIT = 500
 
 @router.get("/")
 async def get_next_raw_expense(db: Session = Depends(get_db)):
@@ -29,12 +42,12 @@ async def get_next_raw_expense(db: Session = Depends(get_db)):
 
 @router.get("/all")
 async def get_all_raw_expenses(
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-    amount_min: Optional[float] = Query(None, description="Minimum amount"),
-    amount_max: Optional[float] = Query(None, description="Maximum amount"),
-    source: Optional[str] = Query(None, description="Filter by source"),
-    search: Optional[str] = Query(None, description="Search in merchant/description"),
+    date_from: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="Start date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="End date (YYYY-MM-DD)"),
+    amount_min: Optional[float] = Query(None, ge=0, description="Minimum amount"),
+    amount_max: Optional[float] = Query(None, ge=0, description="Maximum amount"),
+    source: Optional[str] = Query(None, max_length=100, description="Filter by source"),
+    search: Optional[str] = Query(None, max_length=255, description="Search in merchant/description"),
     db: Session = Depends(get_db)
 ):
     """Get all raw expenses to process (FIFO order) with optional filters"""
@@ -61,16 +74,18 @@ async def get_all_raw_expenses(
         query = query.filter(RawExpense.source == source)
     
     if search:
+        # Escape SQL wildcards
+        escaped_search = search.replace("%", r"\%").replace("_", r"\_")
         query = query.filter(
-            (RawExpense.raw_merchant_name.contains(search)) |
-            (RawExpense.raw_description.contains(search))
+            (RawExpense.raw_merchant_name.contains(escaped_search)) |
+            (RawExpense.raw_description.contains(escaped_search))
         )
     
     raw_expenses = query.order_by(RawExpense.imported_at.asc()).all()
     
     return raw_expenses
 
-@router.get("/count")
+@router.get("/count", response_model=QueueCountResponse)
 async def get_queue_count(db: Session = Depends(get_db)):
     """Get the number of unprocessed raw expenses"""
     count = db.query(RawExpense).filter(
@@ -158,15 +173,15 @@ async def get_suggestions(raw_expense_id: int, db: Session = Depends(get_db)):
     
     return suggestions
 
-@router.post("/process")
-async def process_raw_expense(data: dict, db: Session = Depends(get_db)):
+@router.post("/process", response_model=ProcessedExpenseResponse)
+async def process_raw_expense(data: ProcessExpenseRequest, db: Session = Depends(get_db)):
     """Process a raw expense into a proper expense"""
-    raw_expense_id = data.get("raw_expense_id")
-    merchant_name = data.get("merchant_name")
-    category_id = data.get("category_id")
-    description = data.get("description", "")
-    tag_names = data.get("tags", [])
-    expense_type = data.get("type")
+    raw_expense_id = data.raw_expense_id
+    merchant_name = data.merchant_name
+    category_id = data.category_id
+    description = data.description or ""
+    tag_names = data.tags
+    expense_type = data.type
     
     # Get raw expense
     raw_expense = db.query(RawExpense).filter(RawExpense.id == raw_expense_id).first()
@@ -177,6 +192,12 @@ async def process_raw_expense(data: dict, db: Session = Depends(get_db)):
     existing = db.query(Expense).filter(Expense.raw_expense_id == raw_expense_id).first()
     if existing:
         raise HTTPException(status_code=400, detail="Raw expense already processed")
+    
+    # Validate category exists if provided
+    if category_id is not None:
+        category = db.query(Category).filter(Category.id == category_id).first()
+        if not category:
+            raise HTTPException(status_code=400, detail="Category not found")
     
     # Handle merchant alias
     merchant_alias = None
@@ -240,7 +261,7 @@ async def discard_raw_expense(raw_expense_id: int, db: Session = Depends(get_db)
     db.commit()
     return {"message": "Raw expense discarded"}
 
-@router.post("/apply-rules")
+@router.post("/apply-rules", response_model=ApplyRulesResponse)
 async def apply_rules(db: Session = Depends(get_db)):
     """Apply all active rules to raw expenses in the queue"""
     # Get all active rules
@@ -346,7 +367,13 @@ def _matches_rule(raw_expense: RawExpense, rule: Rule) -> bool:
         return field_value_str == rule.match_value
     elif rule.match_type == "regex":
         try:
-            return bool(re.search(rule.match_value, field_value_str, re.IGNORECASE))
+            # Add timeout protection for regex (basic protection against ReDoS)
+            # Note: For full protection, use the 'regex' library with timeout
+            pattern = rule.match_value
+            # Limit regex complexity by checking pattern length
+            if len(pattern) > 500:
+                return False
+            return bool(re.search(pattern, field_value_str, re.IGNORECASE))
         except re.error:
             return False
 
@@ -425,13 +452,10 @@ async def find_duplicates(db: Session = Depends(get_db)):
     return duplicates
 
 
-@router.post("/archive")
-async def archive_raw_expenses(data: dict, db: Session = Depends(get_db)):
+@router.post("/archive", response_model=ArchiveResponse)
+async def archive_raw_expenses(data: ArchiveExpensesRequest, db: Session = Depends(get_db)):
     """Archive multiple raw expenses by creating expense records with archived=True"""
-    raw_expense_ids = data.get("raw_expense_ids", [])
-    
-    if not raw_expense_ids:
-        raise HTTPException(status_code=400, detail="No raw expense IDs provided")
+    raw_expense_ids = data.raw_expense_ids
     
     archived_count = 0
     
@@ -464,18 +488,15 @@ async def archive_raw_expenses(data: dict, db: Session = Depends(get_db)):
     return {"message": f"Archived {archived_count} expense(s)", "archived_count": archived_count}
 
 
-@router.post("/merge")
-async def merge_expenses(data: dict, db: Session = Depends(get_db)):
+@router.post("/merge", response_model=MergeResponse)
+async def merge_expenses(data: MergeExpensesRequest, db: Session = Depends(get_db)):
     """Merge multiple raw expenses into a single expense.
     
     Creates a single expense with the sum of amounts and earliest date,
     then archives the original raw expenses.
     """
-    raw_expense_ids = data.get("raw_expense_ids", [])
-    expense_data = data.get("expense_data", {})
-    
-    if len(raw_expense_ids) < 2:
-        raise HTTPException(status_code=400, detail="At least 2 expenses are required for merging")
+    raw_expense_ids = data.raw_expense_ids
+    expense_data = data.expense_data
     
     # Validate all raw expenses exist and are not processed
     raw_expenses = []
@@ -491,11 +512,17 @@ async def merge_expenses(data: dict, db: Session = Depends(get_db)):
         raw_expenses.append(raw_expense)
     
     # Get expense data
-    merchant_name = expense_data.get("merchant_name")
-    category_id = expense_data.get("category_id")
-    description = expense_data.get("description", "")
-    tag_names = expense_data.get("tags", [])
-    expense_type = expense_data.get("type")
+    merchant_name = expense_data.merchant_name
+    category_id = expense_data.category_id
+    description = expense_data.description or ""
+    tag_names = expense_data.tags
+    expense_type = expense_data.type
+    
+    # Validate category exists if provided
+    if category_id is not None:
+        category = db.query(Category).filter(Category.id == category_id).first()
+        if not category:
+            raise HTTPException(status_code=400, detail="Category not found")
     
     # Calculate merged amount (sum) and date (earliest)
     total_amount = sum(float(raw.amount) for raw in raw_expenses)
@@ -544,9 +571,17 @@ async def merge_expenses(data: dict, db: Session = Depends(get_db)):
         expense_tag = ExpenseTag(expense_id=merged_expense.id, tag_id=tag.id)
         db.add(expense_tag)
     
-    # Archive the original raw expenses
+    # Archive the original raw expenses by creating archived expense records
     for raw_expense in raw_expenses:
-        raw_expense.archived = True
+        archived_expense = Expense(
+            raw_expense_id=raw_expense.id,
+            bank_account_id=raw_expense.bank_account_id,
+            transaction_date=raw_expense.transaction_date,
+            amount=raw_expense.amount,
+            currency=raw_expense.currency,
+            archived=True
+        )
+        db.add(archived_expense)
     
     db.commit()
     

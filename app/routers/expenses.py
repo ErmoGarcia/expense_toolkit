@@ -6,8 +6,12 @@ from ..models.expense import Expense
 from ..models.category import Category
 from ..models.tag import Tag, ExpenseTag
 from ..models.merchant import MerchantAlias
+from ..schemas import ExpenseUpdate
 
 router = APIRouter()
+
+# Maximum allowed limit for pagination
+MAX_LIMIT = 500
 
 def serialize_expense(expense, include_children=False):
     """Serialize an expense with its relationships"""
@@ -51,21 +55,20 @@ def serialize_expense(expense, include_children=False):
 
 @router.get("")
 async def get_expenses(
-    skip: int = Query(0, description="Number of records to skip"),
-    limit: int = Query(50, description="Number of records to return"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=MAX_LIMIT, description="Number of records to return"),
     category: Optional[str] = Query(None, description="Filter by category ID"),
     tags: Optional[str] = Query(None, description="Filter by tag ID"),
     account: Optional[str] = Query(None, description="Filter by account ID"),
-    search: Optional[str] = Query(None, description="Search in description/merchant"),
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    search: Optional[str] = Query(None, max_length=255, description="Search in description/merchant"),
+    date_from: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="Start date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="End date (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ):
     """Get expenses with optional filters."""
     query = db.query(Expense)
 
     # Exclude archived expenses
-    # Note: parent_expense_id is legacy and not used for merge functionality
     query = query.filter(Expense.archived == False)
 
     # Apply filters
@@ -100,9 +103,11 @@ async def get_expenses(
             pass  # Invalid account ID, ignore filter
 
     if search:
+        # Escape SQL wildcards
+        escaped_search = search.replace("%", r"\%").replace("_", r"\_")
         query = query.filter(
-            Expense.description.contains(search) |
-            Expense.merchant_alias.has(MerchantAlias.display_name.contains(search))
+            Expense.description.contains(escaped_search) |
+            Expense.merchant_alias.has(MerchantAlias.display_name.contains(escaped_search))
         )
 
     if date_from:
@@ -139,9 +144,10 @@ async def get_expenses(
             pass
 
     if search:
+        escaped_search = search.replace("%", r"\%").replace("_", r"\_")
         count_query = count_query.filter(
-            Expense.description.contains(search) |
-            Expense.merchant_alias.has(MerchantAlias.display_name.contains(search))
+            Expense.description.contains(escaped_search) |
+            Expense.merchant_alias.has(MerchantAlias.display_name.contains(escaped_search))
         )
     if date_from:
         count_query = count_query.filter(Expense.transaction_date >= date_from)
@@ -172,20 +178,32 @@ async def get_expense(expense_id: int, db: Session = Depends(get_db)):
     return serialize_expense(expense)
 
 @router.put("/{expense_id}")
-async def update_expense(expense_id: int, expense_data: dict, db: Session = Depends(get_db)):
+async def update_expense(expense_id: int, expense_data: ExpenseUpdate, db: Session = Depends(get_db)):
     """Update an existing expense"""
     expense = db.query(Expense).filter(Expense.id == expense_id).first()
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
     
-    # Update fields
-    for field, value in expense_data.items():
-        if hasattr(expense, field):
-            setattr(expense, field, value)
+    # Validate category exists if provided
+    if expense_data.category_id is not None:
+        category = db.query(Category).filter(Category.id == expense_data.category_id).first()
+        if not category:
+            raise HTTPException(status_code=400, detail="Category not found")
+    
+    # Validate merchant exists if provided
+    if expense_data.merchant_alias_id is not None:
+        merchant = db.query(MerchantAlias).filter(MerchantAlias.id == expense_data.merchant_alias_id).first()
+        if not merchant:
+            raise HTTPException(status_code=400, detail="Merchant not found")
+    
+    # Update only provided fields
+    update_data = expense_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(expense, field, value)
     
     db.commit()
     db.refresh(expense)
-    return expense
+    return serialize_expense(expense)
 
 @router.delete("/{expense_id}")
 async def delete_expense(expense_id: int, db: Session = Depends(get_db)):
@@ -208,7 +226,7 @@ async def requeue_expense(expense_id: int, db: Session = Depends(get_db)):
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
     
-    if not expense.raw_expense_id:
+    if expense.raw_expense_id is None:
         raise HTTPException(status_code=400, detail="Expense has no associated raw expense and cannot be requeued")
     
     # Delete the expense record to free up the raw expense

@@ -81,25 +81,37 @@ class ExpenseManager {
 
     async loadFilters() {
         try {
-            const [categories, tags] = await Promise.all([
-                fetch('/api/categories').then(r => r.json()),
-                fetch('/api/tags').then(r => r.json())
+            const [categoriesRes, tagsRes] = await Promise.all([
+                fetch('/api/categories'),
+                fetch('/api/tags')
             ]);
+
+            if (!categoriesRes.ok || !tagsRes.ok) {
+                throw new Error('Failed to load filters');
+            }
+
+            const categories = await categoriesRes.json();
+            const tags = await tagsRes.json();
 
             this.categories = categories;
             this.populateCategorySelect('categoryFilter', categories);
             this.populateSelect('tagsFilter', tags, 'id', 'name');
         } catch (error) {
             console.error('Error loading filters:', error);
+            showToast('Failed to load filters', 'error');
         }
     }
 
     populateCategorySelect(selectId, categories) {
         const select = document.getElementById(selectId);
         const currentValue = select.value;
+        const firstOption = select.querySelector('option');
         
         // Clear existing options except the first one
-        select.innerHTML = select.querySelector('option').outerHTML;
+        select.innerHTML = '';
+        if (firstOption) {
+            select.appendChild(firstOption);
+        }
         
         // Sort categories: parents first, then children
         const parents = categories.filter(cat => !cat.parent_id);
@@ -109,7 +121,7 @@ class ExpenseManager {
         parents.forEach(parent => {
             const option = document.createElement('option');
             option.value = parent.id;
-            option.textContent = parent.name;
+            option.textContent = parent.name;  // textContent is safe from XSS
             select.appendChild(option);
             
             // Add children of this parent
@@ -117,7 +129,7 @@ class ExpenseManager {
             parentChildren.forEach(child => {
                 const childOption = document.createElement('option');
                 childOption.value = child.id;
-                childOption.innerHTML = '&nbsp;&nbsp;↳ ' + child.name;
+                childOption.textContent = '  \u21B3 ' + child.name;  // Unicode arrow
                 select.appendChild(childOption);
             });
         });
@@ -128,14 +140,18 @@ class ExpenseManager {
     populateSelect(selectId, items, valueField, textField) {
         const select = document.getElementById(selectId);
         const currentValue = select.value;
+        const firstOption = select.querySelector('option');
         
         // Clear existing options except the first one
-        select.innerHTML = select.querySelector('option').outerHTML;
+        select.innerHTML = '';
+        if (firstOption) {
+            select.appendChild(firstOption);
+        }
         
         items.forEach(item => {
             const option = document.createElement('option');
             option.value = item[valueField];
-            option.textContent = item[textField];
+            option.textContent = item[textField];  // textContent is safe from XSS
             select.appendChild(option);
         });
         
@@ -151,6 +167,10 @@ class ExpenseManager {
             });
 
             const response = await fetch(`/api/expenses?${params}`);
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Failed to load expenses');
+            }
             const data = await response.json();
 
             this.renderExpenses(data.expenses || []);
@@ -158,7 +178,7 @@ class ExpenseManager {
             this.updateTotal(data.expenses || []);
         } catch (error) {
             console.error('Error loading expenses:', error);
-            this.renderError('Failed to load expenses');
+            this.renderError('Failed to load expenses: ' + error.message);
         }
     }
 
@@ -189,41 +209,7 @@ class ExpenseManager {
                     </tr>
                 </thead>
                 <tbody>
-                    ${expenses.map(expense => `
-                        <tr>
-                            <td>${this.formatDate(expense.transaction_date)}</td>
-                            <td>
-                                ${expense.merchant_alias?.display_name || 'Unknown'}
-                                ${expense.is_group ? `<span class="expense-group-indicator" title="Grouped expense - Click to view details" onclick="expenseManager.showGroupDetails(${expense.id})">📦</span>` : ''}
-                            </td>
-                            <td>${expense.description || ''}</td>
-                            <td>${expense.category?.name || ''}</td>
-                            <td class="expense-amount ${parseFloat(expense.amount) < 0 ? 'negative' : 'positive'}">
-                                £${Math.abs(parseFloat(expense.amount)).toFixed(2)}
-                            </td>
-                            <td>
-                                ${(expense.tags || []).map(tag =>
-                                    `<span class="expense-tag">#${tag.name}</span>`
-                                ).join('')}
-                            </td>
-                            <td class="expense-indicator">
-                                ${expense.type ? `<span class="type-badge type-${expense.type.replace(' ', '-')}">${expense.type}</span>` : ''}
-                            </td>
-                            <td class="expense-actions">
-                                <div class="expense-menu">
-                                    <button class="expense-menu-btn" onclick="expenseManager.toggleMenu(event, ${expense.id})" aria-label="Actions">
-                                        <span class="three-dots">⋮</span>
-                                    </button>
-                                    <div class="expense-menu-dropdown" id="menu-${expense.id}">
-                                        <button onclick="expenseManager.requeueExpense(${expense.id}, ${expense.raw_expense_id})" class="menu-item">
-                                            <span class="menu-icon">↩</span>
-                                            Send to Queue
-                                        </button>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    `).join('')}
+                    ${expenses.map(expense => this.renderExpenseRow(expense)).join('')}
                 </tbody>
             </table>
         `;
@@ -231,10 +217,59 @@ class ExpenseManager {
         container.innerHTML = tableHTML;
     }
 
+    renderExpenseRow(expense) {
+        const merchantName = expense.merchant_alias?.display_name || 'Unknown';
+        const description = expense.description || '';
+        const categoryName = expense.category?.name || '';
+        const amount = parseFloat(expense.amount);
+        const isNegative = amount < 0;
+        const expenseType = expense.type || '';
+        
+        // Safely render tags
+        const tagsHtml = (expense.tags || []).map(tag =>
+            `<span class="expense-tag">#${escapeHtml(tag.name)}</span>`
+        ).join('');
+        
+        // Type badge
+        const typeHtml = expenseType 
+            ? `<span class="type-badge type-${escapeAttr(expenseType.replace(' ', '-'))}">${escapeHtml(expenseType)}</span>` 
+            : '';
+        
+        return `
+            <tr>
+                <td>${escapeHtml(this.formatDate(expense.transaction_date))}</td>
+                <td>
+                    ${escapeHtml(merchantName)}
+                    ${expense.is_group ? `<span class="expense-group-indicator" title="Grouped expense - Click to view details" onclick="expenseManager.showGroupDetails(${parseInt(expense.id)})">&#128230;</span>` : ''}
+                </td>
+                <td>${escapeHtml(description)}</td>
+                <td>${escapeHtml(categoryName)}</td>
+                <td class="expense-amount ${isNegative ? 'negative' : 'positive'}">
+                    ${formatCurrency(amount, expense.currency || 'GBP')}
+                </td>
+                <td>${tagsHtml}</td>
+                <td class="expense-indicator">${typeHtml}</td>
+                <td class="expense-actions">
+                    <div class="expense-menu">
+                        <button class="expense-menu-btn" onclick="expenseManager.toggleMenu(event, ${parseInt(expense.id)})" aria-label="Actions">
+                            <span class="three-dots">&#8942;</span>
+                        </button>
+                        <div class="expense-menu-dropdown" id="menu-${parseInt(expense.id)}">
+                            <button onclick="expenseManager.requeueExpense(${parseInt(expense.id)}, ${expense.raw_expense_id ? parseInt(expense.raw_expense_id) : 'null'})" class="menu-item">
+                                <span class="menu-icon">&#8617;</span>
+                                Send to Queue
+                            </button>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
     renderError(message) {
         document.getElementById('expensesContent').innerHTML = `
             <div style="text-align: center; padding: 2rem; color: #dc3545;">
-                ${message}
+                ${escapeHtml(message)}
             </div>
         `;
     }
@@ -254,12 +289,15 @@ class ExpenseManager {
             sum + parseFloat(expense.amount), 0);
         
         document.getElementById('totalAmount').textContent = 
-            `Total: £${Math.abs(total).toFixed(2)}`;
+            `Total: ${formatCurrency(total)}`;
     }
 
     async updateQueueCount() {
         try {
             const response = await fetch('/api/queue/count');
+            if (!response.ok) {
+                throw new Error('Failed to load queue count');
+            }
             const data = await response.json();
             document.getElementById('queueCount').textContent = data.count || 0;
         } catch (error) {
@@ -268,6 +306,7 @@ class ExpenseManager {
     }
 
     formatDate(dateString) {
+        if (!dateString) return '';
         return new Date(dateString + 'T00:00:00').toLocaleDateString('en-GB');
     }
 
@@ -275,20 +314,21 @@ class ExpenseManager {
         try {
             const response = await fetch(`/api/expenses/${expenseId}`);
             if (!response.ok) {
-                throw new Error('Failed to load expense details');
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || 'Failed to load expense details');
             }
             
             const expense = await response.json();
             
             if (!expense.child_expenses || expense.child_expenses.length === 0) {
-                alert('No child expenses found for this group.');
+                showToast('No child expenses found for this group.', 'info');
                 return;
             }
             
             this.renderGroupModal(expense);
         } catch (error) {
             console.error('Error loading group details:', error);
-            alert('Error loading group details: ' + error.message);
+            showToast('Error loading group details: ' + error.message, 'error');
         }
     }
 
@@ -310,33 +350,33 @@ class ExpenseManager {
                             <div class="group-parent-details">
                                 <div class="detail-row">
                                     <span class="detail-label">Date:</span>
-                                    <span class="detail-value">${this.formatDate(expense.transaction_date)}</span>
+                                    <span class="detail-value">${escapeHtml(this.formatDate(expense.transaction_date))}</span>
                                 </div>
                                 <div class="detail-row">
                                     <span class="detail-label">Merchant:</span>
-                                    <span class="detail-value">${expense.merchant_alias?.display_name || 'Unknown'}</span>
+                                    <span class="detail-value">${escapeHtml(expense.merchant_alias?.display_name || 'Unknown')}</span>
                                 </div>
                                 <div class="detail-row">
                                     <span class="detail-label">Category:</span>
-                                    <span class="detail-value">${expense.category?.name || 'Uncategorized'}</span>
+                                    <span class="detail-value">${escapeHtml(expense.category?.name || 'Uncategorized')}</span>
                                 </div>
                                 <div class="detail-row">
                                     <span class="detail-label">Total Amount:</span>
                                     <span class="detail-value ${totalAmount < 0 ? 'negative' : 'positive'}">
-                                        ${totalAmount < 0 ? '-' : ''}£${Math.abs(totalAmount).toFixed(2)}
+                                        ${formatCurrency(totalAmount, expense.currency || 'GBP')}
                                     </span>
                                 </div>
                                 ${expense.description ? `
                                 <div class="detail-row">
                                     <span class="detail-label">Description:</span>
-                                    <span class="detail-value">${expense.description}</span>
+                                    <span class="detail-value">${escapeHtml(expense.description)}</span>
                                 </div>
                                 ` : ''}
                                 ${expense.tags && expense.tags.length > 0 ? `
                                 <div class="detail-row">
                                     <span class="detail-label">Tags:</span>
                                     <span class="detail-value">
-                                        ${expense.tags.map(tag => `<span class="expense-tag">#${tag.name}</span>`).join(' ')}
+                                        ${expense.tags.map(tag => `<span class="expense-tag">#${escapeHtml(tag.name)}</span>`).join(' ')}
                                     </span>
                                 </div>
                                 ` : ''}
@@ -358,22 +398,7 @@ class ExpenseManager {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        ${childExpenses.map(child => `
-                                            <tr>
-                                                <td>${this.formatDate(child.transaction_date)}</td>
-                                                <td>${child.merchant_alias?.display_name || 'Unknown'}</td>
-                                                <td>${child.description || ''}</td>
-                                                <td>${child.category?.name || ''}</td>
-                                                <td class="expense-amount ${parseFloat(child.amount) < 0 ? 'negative' : 'positive'}">
-                                                    ${parseFloat(child.amount) < 0 ? '-' : ''}£${Math.abs(parseFloat(child.amount)).toFixed(2)}
-                                                </td>
-                                                <td>
-                                                    ${(child.tags || []).map(tag => 
-                                                        `<span class="expense-tag">#${tag.name}</span>`
-                                                    ).join('')}
-                                                </td>
-                                            </tr>
-                                        `).join('')}
+                                        ${childExpenses.map(child => this.renderChildExpenseRow(child)).join('')}
                                     </tbody>
                                 </table>
                             </div>
@@ -400,6 +425,26 @@ class ExpenseManager {
         
         // Add keyboard listener for Escape
         document.addEventListener('keydown', this.handleModalKeydown);
+    }
+
+    renderChildExpenseRow(child) {
+        const childAmount = parseFloat(child.amount);
+        return `
+            <tr>
+                <td>${escapeHtml(this.formatDate(child.transaction_date))}</td>
+                <td>${escapeHtml(child.merchant_alias?.display_name || 'Unknown')}</td>
+                <td>${escapeHtml(child.description || '')}</td>
+                <td>${escapeHtml(child.category?.name || '')}</td>
+                <td class="expense-amount ${childAmount < 0 ? 'negative' : 'positive'}">
+                    ${formatCurrency(childAmount, child.currency || 'GBP')}
+                </td>
+                <td>
+                    ${(child.tags || []).map(tag => 
+                        `<span class="expense-tag">#${escapeHtml(tag.name)}</span>`
+                    ).join('')}
+                </td>
+            </tr>
+        `;
     }
 
     handleModalClick(event) {
@@ -451,7 +496,7 @@ class ExpenseManager {
 
     async requeueExpense(expenseId, rawExpenseId) {
         if (!rawExpenseId) {
-            alert('This expense cannot be sent back to the queue because it has no associated raw expense.');
+            showToast('This expense cannot be sent back to the queue because it has no associated raw expense.', 'warning');
             return;
         }
 
@@ -468,18 +513,18 @@ class ExpenseManager {
             });
 
             if (!response.ok) {
-                const error = await response.json();
+                const error = await response.json().catch(() => ({}));
                 throw new Error(error.detail || 'Failed to requeue expense');
             }
 
-            alert('Expense sent back to queue successfully!');
+            showToast('Expense sent back to queue successfully!', 'success');
             
             // Reload the expenses and update queue count
             await this.loadExpenses();
             await this.updateQueueCount();
         } catch (error) {
             console.error('Error requeuing expense:', error);
-            alert('Error: ' + error.message);
+            showToast('Error: ' + error.message, 'error');
         }
     }
 }
