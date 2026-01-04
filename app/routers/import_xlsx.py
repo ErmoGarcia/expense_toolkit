@@ -24,9 +24,9 @@ async def upload_xlsx(
     db: Session = Depends(get_db)
 ):
     """
-    Upload and store an XLSX/CSV file for later processing.
-    The file is saved to disk and an import history record is created.
-    Actual parsing will be done in a separate step once format is configured.
+    Upload and immediately process an XLSX/CSV file.
+    The file is saved to disk, an import history record is created,
+    and the file is processed immediately to create RawExpense records.
     """
     # Validate file is provided
     if not file.filename:
@@ -71,7 +71,7 @@ async def upload_xlsx(
         stored_filename=stored_filename,
         bank_account_id=bank_account_id,
         file_size=len(content),
-        status="pending",  # pending, processing, completed, failed
+        status="pending",
         records_imported=None,
         records_skipped=None
     )
@@ -80,15 +80,36 @@ async def upload_xlsx(
     db.commit()
     db.refresh(import_record)
     
-    return {
-        "id": import_record.id,
-        "message": f"File '{file.filename}' uploaded successfully",
-        "original_filename": file.filename,
-        "stored_filename": stored_filename,
-        "bank_account_id": bank_account_id,
-        "status": "pending",
-        "file_size": len(content)
-    }
+    # Immediately process the file
+    try:
+        records_imported, records_skipped, bank_name = process_import(import_record, filepath, db)
+        
+        return {
+            "id": import_record.id,
+            "message": f"File '{file.filename}' uploaded and processed successfully",
+            "original_filename": file.filename,
+            "stored_filename": stored_filename,
+            "bank_account_id": import_record.bank_account_id,
+            "bank_name": bank_name,
+            "status": "completed",
+            "records_imported": records_imported,
+            "records_skipped": records_skipped,
+            "file_size": len(content)
+        }
+    except Exception as e:
+        # Import record is already marked as failed by process_import
+        print(f"Error processing import {import_record.id}: {e}")
+        db.refresh(import_record)
+        
+        return {
+            "id": import_record.id,
+            "message": f"File uploaded but processing failed: {str(e)}",
+            "original_filename": file.filename,
+            "stored_filename": stored_filename,
+            "status": "failed",
+            "error": str(e),
+            "file_size": len(content)
+        }
 
 
 @router.get("/history")
@@ -126,108 +147,8 @@ async def delete_import_record(import_id: int, db: Session = Depends(get_db)):
     return {"message": "Import record deleted"}
 
 
-@router.get("/pending")
-async def get_pending_imports(db: Session = Depends(get_db)):
-    """Get all pending imports that need processing"""
-    pending = db.query(ImportHistory).filter(
-        ImportHistory.status == "pending"
-    ).order_by(ImportHistory.imported_at.asc()).all()
-    
-    return pending
-
-
 @router.get("/bank-accounts")
 async def get_bank_accounts(db: Session = Depends(get_db)):
     """Get all bank accounts for the import dropdown"""
     accounts = db.query(BankAccount).all()
     return accounts
-
-
-@router.post("/process/{import_id}")
-async def process_import_file(import_id: int, db: Session = Depends(get_db)):
-    """Process a pending import file"""
-    record = db.query(ImportHistory).filter(ImportHistory.id == import_id).first()
-    if not record:
-        raise HTTPException(status_code=404, detail="Import record not found")
-    
-    if record.status != "pending":
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Import already processed (status: {record.status})"
-        )
-    
-    if not record.stored_filename:
-        raise HTTPException(status_code=400, detail="No stored filename for this import")
-    
-    filepath = settings.XLSX_DIR / record.stored_filename
-    if not filepath.exists():
-        raise HTTPException(status_code=404, detail="Import file not found on disk")
-    
-    try:
-        records_imported, records_skipped, bank_name = process_import(record, filepath, db)
-        return {
-            "message": "Import processed successfully",
-            "bank_name": bank_name,
-            "records_imported": records_imported,
-            "records_skipped": records_skipped
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        # Log the error in production
-        raise HTTPException(status_code=500, detail="Processing failed. Please check the file format.")
-
-
-@router.post("/process-all")
-async def process_all_pending(db: Session = Depends(get_db)):
-    """Process all pending imports"""
-    pending = db.query(ImportHistory).filter(
-        ImportHistory.status == "pending"
-    ).order_by(ImportHistory.imported_at.asc()).all()
-    
-    if not pending:
-        return {"message": "No pending imports to process", "processed": 0}
-    
-    results = []
-    for record in pending:
-        if not record.stored_filename:
-            results.append({
-                "id": record.id,
-                "filename": record.filename,
-                "status": "error",
-                "error": "No stored filename"
-            })
-            continue
-            
-        filepath = settings.XLSX_DIR / record.stored_filename
-        if not filepath.exists():
-            results.append({
-                "id": record.id,
-                "filename": record.filename,
-                "status": "error",
-                "error": "File not found"
-            })
-            continue
-        
-        try:
-            records_imported, records_skipped, bank_name = process_import(record, filepath, db)
-            results.append({
-                "id": record.id,
-                "filename": record.filename,
-                "status": "completed",
-                "bank_name": bank_name,
-                "records_imported": records_imported,
-                "records_skipped": records_skipped
-            })
-        except Exception as e:
-            results.append({
-                "id": record.id,
-                "filename": record.filename,
-                "status": "error",
-                "error": "Processing failed"
-            })
-    
-    return {
-        "message": f"Processed {len(results)} imports",
-        "results": results
-    }

@@ -40,10 +40,6 @@ async def read_queue():
 async def read_import():
     return FileResponse(settings.STATIC_DIR / "import.html")
 
-@app.get("/notifications")
-async def read_notifications():
-    return FileResponse(settings.STATIC_DIR / "notifications.html")
-
 @app.get("/categories")
 async def read_categories():
     return FileResponse(settings.STATIC_DIR / "categories.html")
