@@ -1897,6 +1897,225 @@ input:checked+.slider:before {
     }
 }
 
+/* Duplicate row highlight in queue list */
+.queue-list-item.has-duplicate {
+    background-color: #fffbea;
+}
+
+.queue-list-item.has-duplicate:hover {
+    background-color: #fff8dc;
+}
+
+.queue-list-item.has-duplicate.focused {
+    background-color: #fff8dc;
+}
+
+/* Duplicates warning banner */
+.duplicates-banner {
+    background-color: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.duplicates-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: #856404;
+}
+
+.duplicates-banner-icon {
+    font-size: 1.5rem;
+}
+
+.duplicates-banner-text {
+    font-weight: 500;
+}
+
+.duplicates-banner-button {
+    flex-shrink: 0;
+}
+
+/* Duplicates resolution page */
+.duplicates-page {
+    margin-top: 2rem;
+}
+
+.duplicates-page-header {
+    text-align: center;
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+}
+
+.duplicates-page-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.5rem;
+}
+
+.duplicates-page-subtitle {
+    color: #6c757d;
+    font-size: 0.95rem;
+}
+
+.duplicate-set-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.duplicate-set-header {
+    background-color: #e7f1ff;
+    padding: 1rem 1.5rem;
+    border-radius: 8px 8px 0 0;
+    border: 2px solid #007bff;
+    border-bottom: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.duplicate-set-title {
+    font-weight: 600;
+    color: #007bff;
+    font-size: 1.1rem;
+}
+
+.duplicate-set-navigation {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.duplicate-set-list {
+    border: 2px solid #007bff;
+    border-radius: 0 0 8px 8px;
+    background-color: white;
+    overflow: hidden;
+}
+
+.duplicate-transaction-card {
+    padding: 1.5rem;
+    border-bottom: 2px solid #e9ecef;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.duplicate-transaction-card:last-child {
+    border-bottom: none;
+}
+
+.duplicate-transaction-card:hover {
+    background-color: #f8f9fa;
+}
+
+.duplicate-transaction-card.focused {
+    background-color: #e7f1ff;
+    border-left: 4px solid #007bff;
+    padding-left: calc(1.5rem - 4px);
+}
+
+.duplicate-transaction-card.saved-expense {
+    background-color: #f0f8f5;
+}
+
+.duplicate-transaction-card.saved-expense.focused {
+    background-color: #d4edda;
+}
+
+.duplicate-transaction-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.duplicate-transaction-type {
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.duplicate-transaction-type.raw {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.duplicate-transaction-type.saved {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.duplicate-transaction-details {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.duplicate-detail-row {
+    display: contents;
+}
+
+.duplicate-detail-label {
+    color: #6c757d;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.duplicate-detail-value {
+    color: #212529;
+    font-size: 0.9rem;
+}
+
+.duplicate-transaction-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.duplicates-page-footer {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.duplicates-page-footer .keyboard-hints {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Responsive adjustments for duplicates page */
+@media (max-width: 768px) {
+    .duplicates-banner {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .duplicates-banner-button {
+        width: 100%;
+    }
+    
+    .duplicate-transaction-details {
+        grid-template-columns: 100px 1fr;
+        gap: 0.5rem;
+    }
+}
+
 /* Queue Filters */
 .queue-filters {
     margin-bottom: 2rem;
