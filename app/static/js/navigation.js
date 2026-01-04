@@ -71,18 +71,18 @@
             if (response.ok) {
                 const data = await response.json();
                 const count = data.count || 0;
-                
+
                 const queueBadge = document.getElementById('queueCount');
                 const queueBadgeMobile = document.getElementById('queueCountMobile');
-                
+
                 if (queueBadge) {
                     queueBadge.textContent = count;
-                    queueBadge.style.display = count > 0 ? 'inline-block' : 'none';
+                    queueBadge.style.display = count > 0 ? 'flex' : 'none';
                 }
-                
+
                 if (queueBadgeMobile) {
                     queueBadgeMobile.textContent = count;
-                    queueBadgeMobile.style.display = count > 0 ? 'inline-block' : 'none';
+                    queueBadgeMobile.style.display = count > 0 ? 'flex' : 'none';
                 }
             }
         } catch (error) {

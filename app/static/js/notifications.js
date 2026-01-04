@@ -27,7 +27,7 @@ class NotificationManager {
             const badge = document.getElementById('queueCount');
             if (badge) {
                 badge.textContent = data.count;
-                badge.style.display = data.count > 0 ? 'inline-block' : 'none';
+                badge.style.display = data.count > 0 ? 'flex' : 'none';
             }
         } catch (error) {
             console.error('Error fetching queue count:', error);
@@ -37,7 +37,7 @@ class NotificationManager {
     async parseAllNotifications() {
         const btn = document.getElementById('parseAllBtn');
         const statusEl = document.getElementById('notificationStatus');
-        
+
         btn.disabled = true;
         btn.textContent = 'Parsing...';
         statusEl.textContent = 'Parsing notifications...';
@@ -60,9 +60,9 @@ class NotificationManager {
             this.editedExpenses.clear();
 
             this.displayResults(data);
-            
+
             statusEl.textContent = `Parsed ${data.parsed_count} expenses from ${data.total_notifications} notifications`;
-            
+
         } catch (error) {
             console.error('Error parsing notifications:', error);
             showToast('Failed to parse notifications: ' + error.message, 'error');
@@ -222,17 +222,17 @@ class NotificationManager {
             this.parsedExpenses = this.parsedExpenses.filter(e => e.notification_id !== notificationId);
             this.editedExpenses.delete(notificationId);
             this.renderExpensesList();
-            
+
             // Update counts
             document.getElementById('parsedCount').textContent = this.parsedExpenses.length;
             const discardedCount = parseInt(document.getElementById('discardedCount').textContent);
             document.getElementById('discardedCount').textContent = discardedCount + 1;
-            
+
             // Hide accept button if no expenses left
             if (this.parsedExpenses.length === 0) {
                 document.getElementById('acceptAllBtn').style.display = 'none';
             }
-            
+
             showToast('Notification discarded', 'success');
         } catch (error) {
             console.error('Error discarding notification:', error);
@@ -284,16 +284,16 @@ class NotificationManager {
             }
 
             const data = await response.json();
-            
+
             statusEl.textContent = data.message;
-            
+
             // Clear the list
             this.parsedExpenses = [];
             this.editedExpenses.clear();
             this.renderExpensesList();
-            
+
             showToast('Expenses saved successfully!', 'success');
-            
+
             // Hide results section after a delay
             setTimeout(() => {
                 document.getElementById('resultsSection').style.display = 'none';
