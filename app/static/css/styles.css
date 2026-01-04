@@ -796,6 +796,15 @@ body {
     color: #495057;
 }
 
+.queue-header-checkbox {
+    text-align: center;
+    padding-left: 4px;
+}
+
+.queue-header-amount {
+    text-align: right;
+}
+
 .queue-list {
     max-height: 60vh;
     overflow-y: auto;
@@ -811,7 +820,8 @@ body {
     cursor: pointer;
     transition: background-color 0.15s, border-left 0.15s;
     border-left: 3px solid transparent;
-    user-select: none; /* Prevent text selection on shift+click */
+    user-select: none;
+    /* Prevent text selection on shift+click */
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
@@ -858,6 +868,15 @@ body {
     background-color: #007bff;
     border-color: #007bff;
     color: white;
+}
+
+/* Header checkbox alignment */
+.queue-list-header input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    margin: 0;
+    flex-shrink: 0;
 }
 
 .queue-item-date {
@@ -1728,7 +1747,7 @@ input:checked+.slider:before {
 
 .duplicate-card:hover {
     border-color: #adb5bd;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .duplicate-card.focused {
@@ -1860,17 +1879,17 @@ input:checked+.slider:before {
         flex: 0 0 calc(85% - 0.5rem);
         min-width: 260px;
     }
-    
+
     .duplicate-card-body .detail-row {
         grid-template-columns: 80px 1fr;
         font-size: 0.85rem;
     }
-    
+
     .duplicate-modal .modal-footer {
         flex-direction: column;
         gap: 1rem;
     }
-    
+
     .duplicate-modal .modal-footer .keyboard-hints {
         order: 2;
         justify-content: center;
@@ -2215,6 +2234,7 @@ input:checked+.slider:before {
 
 /* Responsive Queue List for new columns */
 @media (max-width: 1024px) {
+
     .queue-list-header,
     .queue-list-item {
         grid-template-columns: 40px 100px 120px 1fr 100px 80px 100px;
@@ -2224,12 +2244,13 @@ input:checked+.slider:before {
         display: none;
     }
 
-    .queue-list-header > div:nth-child(7) {
+    .queue-list-header>div:nth-child(7) {
         display: none;
     }
 }
 
 @media (max-width: 768px) {
+
     .queue-list-header,
     .queue-list-item {
         grid-template-columns: 40px 100px 1fr 80px;
@@ -2240,11 +2261,11 @@ input:checked+.slider:before {
     .queue-item-category,
     .queue-item-type,
     .queue-item-tags,
-    .queue-list-header > div:nth-child(3),
-    .queue-list-header > div:nth-child(4),
-    .queue-list-header > div:nth-child(5),
-    .queue-list-header > div:nth-child(6),
-    .queue-list-header > div:nth-child(7) {
+    .queue-list-header>div:nth-child(3),
+    .queue-list-header>div:nth-child(4),
+    .queue-list-header>div:nth-child(5),
+    .queue-list-header>div:nth-child(6),
+    .queue-list-header>div:nth-child(7) {
         display: none;
     }
 

@@ -7,8 +7,8 @@ class Autocomplete {
         this.suggestions = [];
         this.selectedIndex = -1;
         this.container = null;
-        this.onSelect = options.onSelect || (() => {});
-        this.onCreate = options.onCreate || (() => {});
+        this.onSelect = options.onSelect || (() => { });
+        this.onCreate = options.onCreate || (() => { });
         this.allowCreate = options.allowCreate !== false;
         this.minLength = options.minLength || 1;
         this.debounceTimer = null;
@@ -210,12 +210,12 @@ class QueueProcessor {
         this.duplicateModalItems = [];
         this.duplicateModalFocusIndex = 0;
         this.duplicateModalKeyHandler = null;
-        
+
         // Update mode state
         this.updateMode = false;
         this.categoryTypeCache = {};
         this.currentModalTags = [];
-        
+
         this.init();
     }
 
@@ -245,7 +245,7 @@ class QueueProcessor {
 
     getFilteredCategories(amount) {
         const categoryType = parseFloat(amount) >= 0 ? 'income' : 'expense';
-        return this.categories.filter(cat => 
+        return this.categories.filter(cat =>
             cat.category_type === categoryType || !cat.category_type
         );
     }
@@ -253,15 +253,15 @@ class QueueProcessor {
     getBulkCategories(items) {
         const hasNegative = items.some(item => parseFloat(item.amount) < 0);
         const hasPositive = items.some(item => parseFloat(item.amount) >= 0);
-        
+
         if (hasNegative && hasPositive) {
             return this.categories;
         } else if (hasPositive) {
-            return this.categories.filter(cat => 
+            return this.categories.filter(cat =>
                 cat.category_type === 'income' || !cat.category_type
             );
         } else {
-            return this.categories.filter(cat => 
+            return this.categories.filter(cat =>
                 cat.category_type === 'expense' || !cat.category_type
             );
         }
@@ -270,23 +270,23 @@ class QueueProcessor {
     buildCategoryOptionsHtml(categories) {
         const parents = categories.filter(cat => !cat.parent_id);
         const children = categories.filter(cat => cat.parent_id);
-        
+
         let html = '';
-        
+
         parents.forEach(parent => {
             html += `<option value="${parent.id}">${escapeHtml(parent.name)}</option>`;
-            
+
             const parentChildren = children.filter(child => child.parent_id === parent.id);
             parentChildren.forEach(child => {
                 html += `<option value="${child.id}">&nbsp;&nbsp;↳ ${escapeHtml(child.name)}</option>`;
             });
         });
-        
+
         const orphans = children.filter(child => !parents.find(p => p.id === child.parent_id));
         orphans.forEach(orphan => {
             html += `<option value="${orphan.id}">${escapeHtml(orphan.name)}</option>`;
         });
-        
+
         return html;
     }
 
@@ -318,15 +318,22 @@ class QueueProcessor {
             // Escape handling
             if (e.key === 'Escape') {
                 e.preventDefault();
-                
+
                 if (document.getElementById('updateModal')) {
                     this.closeUpdateModal();
                 } else if (this.viewMode === 'merge') {
                     this.closeMergeModal();
                 } else if (document.getElementById('duplicateModal')) {
                     this.closeDuplicateModal();
-                } else if (this.viewMode === 'list' && this.selectedIds.size > 0) {
-                    this.clearSelection();
+                } else if (this.viewMode === 'list') {
+                    // If there are selected items, clear them first (stay in update mode if active)
+                    if (this.selectedIds.size > 0) {
+                        this.clearSelection();
+                    }
+                    // If no items selected and in update mode, exit update mode
+                    else if (this.updateMode) {
+                        this.exitUpdateMode();
+                    }
                 }
                 return;
             }
@@ -356,12 +363,12 @@ class QueueProcessor {
             this.toggleUpdateMode();
             return;
         }
-        
+
         // Navigation requires items
         if (this.queueItems.length === 0) {
             return;
         }
-        
+
         // Navigation - always available
         if (e.key === 'ArrowDown') {
             e.preventDefault();
@@ -379,7 +386,7 @@ class QueueProcessor {
             }
             return;
         }
-        
+
         if (e.key === 'ArrowUp') {
             e.preventDefault();
             if (e.ctrlKey || e.metaKey) {
@@ -396,7 +403,7 @@ class QueueProcessor {
             }
             return;
         }
-        
+
         if (e.key === ' ') {
             e.preventDefault();
             if (e.ctrlKey || e.metaKey) {
@@ -408,7 +415,7 @@ class QueueProcessor {
             }
             return;
         }
-        
+
         // Update mode shortcuts
         if (this.updateMode) {
             if (e.key === 'c') {
@@ -438,21 +445,21 @@ class QueueProcessor {
             }
             return; // Don't process other keys in update mode
         }
-        
+
         // Save action - works on focused item or selected items
         if (e.key === 's') {
             e.preventDefault();
             this.bulkSaveSelected();
             return;
         }
-        
+
         // Discard action - works on focused item or selected items
         if (e.key === 'x') {
             e.preventDefault();
             this.discardSelected();
             return;
         }
-        
+
         // Other bulk actions (require selection, not in update mode)
         if (this.selectedIds.size > 0) {
             if (e.key === 'a') {
@@ -498,24 +505,24 @@ class QueueProcessor {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updates)
             });
-            
+
             if (!response.ok) {
                 const error = await response.json();
                 throw new Error(error.detail || 'Failed to update');
             }
-            
+
             // Update local item
             const index = this.queueItems.findIndex(item => item.id === id);
             if (index !== -1) {
                 Object.assign(this.queueItems[index], updates);
-                
+
                 // Update category object if category_id changed
                 if (updates.category_id) {
                     const cat = this.categories.find(c => c.id === updates.category_id);
                     this.queueItems[index].category = cat ? { id: cat.id, name: cat.name } : null;
                 }
             }
-            
+
             return true;
         } catch (error) {
             console.error('Error updating raw expense:', error);
@@ -528,7 +535,7 @@ class QueueProcessor {
         if (this.categoryTypeCache[categoryId]) {
             return this.categoryTypeCache[categoryId];
         }
-        
+
         try {
             const response = await fetch(`/api/queue/category-type/${categoryId}`);
             if (response.ok) {
@@ -539,7 +546,7 @@ class QueueProcessor {
         } catch (error) {
             console.error('Error getting category type:', error);
         }
-        
+
         return 'discretionary';
     }
 
@@ -552,13 +559,13 @@ class QueueProcessor {
         this.allCategories = this.getBulkCategories(targets);
         this.filteredCategoryList = [...this.allCategories];
         this.categoryModalFocusIndex = 0;
-        
+
         // Find initial focus index
         if (currentCategoryId) {
             const idx = this.filteredCategoryList.findIndex(cat => cat.id === currentCategoryId);
             if (idx >= 0) this.categoryModalFocusIndex = idx;
         }
-        
+
         const modalHtml = `
             <div class="modal-overlay" id="updateModal" onclick="queueProcessor.closeUpdateModal()">
                 <div class="modal-content" onclick="event.stopPropagation()">
@@ -585,13 +592,13 @@ class QueueProcessor {
                 </div>
             </div>
         `;
-        
+
         document.body.insertAdjacentHTML('beforeend', modalHtml);
-        
+
         const searchInput = document.getElementById('categorySearchInput');
         searchInput.addEventListener('input', (e) => this.filterCategories(e.target.value));
         searchInput.addEventListener('keydown', (e) => this.handleCategoryModalKeyboard(e));
-        
+
         searchInput.focus();
     }
 
@@ -599,13 +606,13 @@ class QueueProcessor {
         if (this.filteredCategoryList.length === 0) {
             return '<div class="empty-message">No categories found</div>';
         }
-        
+
         const parents = this.filteredCategoryList.filter(cat => !cat.parent_id);
         const children = this.filteredCategoryList.filter(cat => cat.parent_id);
-        
+
         let html = '<div class="selectable-list" id="categorySelectableList">';
         let index = 0;
-        
+
         parents.forEach(parent => {
             const isFocused = index === this.categoryModalFocusIndex;
             html += `
@@ -614,7 +621,7 @@ class QueueProcessor {
                 </div>
             `;
             index++;
-            
+
             const parentChildren = children.filter(child => child.parent_id === parent.id);
             parentChildren.forEach(child => {
                 const isFocused = index === this.categoryModalFocusIndex;
@@ -626,7 +633,7 @@ class QueueProcessor {
                 index++;
             });
         });
-        
+
         const orphans = children.filter(child => !parents.find(p => p.id === child.parent_id));
         orphans.forEach(orphan => {
             const isFocused = index === this.categoryModalFocusIndex;
@@ -637,7 +644,7 @@ class QueueProcessor {
             `;
             index++;
         });
-        
+
         html += '</div>';
         return html;
     }
@@ -647,7 +654,7 @@ class QueueProcessor {
             this.filteredCategoryList = [...this.allCategories];
         } else {
             const lowerQuery = query.toLowerCase();
-            this.filteredCategoryList = this.allCategories.filter(cat => 
+            this.filteredCategoryList = this.allCategories.filter(cat =>
                 cat.name.toLowerCase().includes(lowerQuery)
             );
         }
@@ -696,14 +703,14 @@ class QueueProcessor {
     async selectCategoryFromList(categoryId) {
         const targets = this.getTargetItems();
         const type = await this.getTypeForCategory(categoryId);
-        
+
         for (const item of targets) {
-            await this.updateRawExpense(item.id, { 
+            await this.updateRawExpense(item.id, {
                 category_id: categoryId,
                 type: type
             });
         }
-        
+
         this.closeUpdateModal();
         this.renderListView();
     }
@@ -711,10 +718,10 @@ class QueueProcessor {
     async openMerchantModal() {
         const targets = this.getTargetItems();
         const firstItem = targets[0];
-        const currentMerchant = firstItem.merchant_alias?.display_name || 
-                               firstItem.suggested_merchant_alias?.display_name || 
-                               firstItem.raw_merchant_name || '';
-        
+        const currentMerchant = firstItem.merchant_alias?.display_name ||
+            firstItem.suggested_merchant_alias?.display_name ||
+            firstItem.raw_merchant_name || '';
+
         // Fetch all merchants
         try {
             const response = await fetch('/api/merchants');
@@ -723,11 +730,11 @@ class QueueProcessor {
             console.error('Error loading merchants:', error);
             this.allMerchants = [];
         }
-        
+
         this.filteredMerchantList = [...this.allMerchants];
         this.merchantModalFocusIndex = 0;
         this.merchantSearchQuery = '';
-        
+
         const modalHtml = `
             <div class="modal-overlay" id="updateModal" onclick="queueProcessor.closeUpdateModal()">
                 <div class="modal-content" onclick="event.stopPropagation()">
@@ -754,29 +761,29 @@ class QueueProcessor {
                 </div>
             </div>
         `;
-        
+
         document.body.insertAdjacentHTML('beforeend', modalHtml);
-        
+
         const searchInput = document.getElementById('merchantSearchInput');
         searchInput.addEventListener('input', (e) => this.filterMerchants(e.target.value));
         searchInput.addEventListener('keydown', (e) => this.handleMerchantModalKeyboard(e));
-        
+
         // Initial filter if there's a current value
         if (currentMerchant) {
             this.filterMerchants(currentMerchant);
         }
-        
+
         searchInput.focus();
-        
+
         // Move cursor to end
         searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
     }
 
     renderMerchantList() {
         const query = this.merchantSearchQuery.trim();
-        
+
         let html = '<div class="selectable-list" id="merchantSelectableList">';
-        
+
         // Render filtered merchants
         this.filteredMerchantList.forEach((merchant, index) => {
             const isFocused = index === this.merchantModalFocusIndex;
@@ -786,7 +793,7 @@ class QueueProcessor {
                 </div>
             `;
         });
-        
+
         // Add "Create new" option if query doesn't match exactly
         if (query && !this.filteredMerchantList.some(m => m.display_name.toLowerCase() === query.toLowerCase())) {
             const createIndex = this.filteredMerchantList.length;
@@ -797,24 +804,24 @@ class QueueProcessor {
                 </div>
             `;
         }
-        
+
         html += '</div>';
-        
+
         if (this.filteredMerchantList.length === 0 && !query) {
             return '<div class="empty-message">No merchants found</div>';
         }
-        
+
         return html;
     }
 
     filterMerchants(query) {
         this.merchantSearchQuery = query;
-        
+
         if (!query.trim()) {
             this.filteredMerchantList = [...this.allMerchants];
         } else {
             const lowerQuery = query.toLowerCase();
-            this.filteredMerchantList = this.allMerchants.filter(merchant => 
+            this.filteredMerchantList = this.allMerchants.filter(merchant =>
                 merchant.display_name.toLowerCase().includes(lowerQuery)
             );
         }
@@ -826,7 +833,7 @@ class QueueProcessor {
         const query = this.merchantSearchQuery.trim();
         const hasCreateOption = query && !this.filteredMerchantList.some(m => m.display_name.toLowerCase() === query.toLowerCase());
         const totalItems = this.filteredMerchantList.length + (hasCreateOption ? 1 : 0);
-        
+
         if (e.key === 'ArrowDown') {
             e.preventDefault();
             if (this.merchantModalFocusIndex < totalItems - 1) {
@@ -871,7 +878,7 @@ class QueueProcessor {
         const targets = this.getTargetItems();
         let finalMerchantId = merchantId;
         let merchantName = '';
-        
+
         if (isCreate) {
             // Create new merchant
             merchantName = this.merchantSearchQuery.trim();
@@ -898,12 +905,12 @@ class QueueProcessor {
             const merchant = this.allMerchants.find(m => m.id === merchantId);
             merchantName = merchant ? merchant.display_name : '';
         }
-        
+
         for (const item of targets) {
             await this.updateRawExpense(item.id, { merchant_alias_id: finalMerchantId });
             item.merchant_alias = { id: finalMerchantId, display_name: merchantName };
         }
-        
+
         this.closeUpdateModal();
         this.renderListView();
     }
@@ -912,7 +919,7 @@ class QueueProcessor {
         const targets = this.getTargetItems();
         const firstItem = targets[0];
         this.currentModalTags = [...(firstItem.tags || [])];
-        
+
         // Fetch all tags
         try {
             const response = await fetch('/api/tags');
@@ -921,11 +928,11 @@ class QueueProcessor {
             console.error('Error loading tags:', error);
             this.allTags = [];
         }
-        
+
         this.filteredTagList = [...this.allTags];
         this.tagModalFocusIndex = 0;
         this.tagSearchQuery = '';
-        
+
         const modalHtml = `
             <div class="modal-overlay" id="updateModal" onclick="queueProcessor.closeUpdateModal()">
                 <div class="modal-content" onclick="event.stopPropagation()">
@@ -956,26 +963,26 @@ class QueueProcessor {
                 </div>
             </div>
         `;
-        
+
         document.body.insertAdjacentHTML('beforeend', modalHtml);
-        
+
         const searchInput = document.getElementById('tagSearchInput');
         searchInput.addEventListener('input', (e) => this.filterTags(e.target.value));
         searchInput.addEventListener('keydown', (e) => this.handleTagModalKeyboard(e));
-        
+
         searchInput.focus();
     }
 
     renderTagList() {
         const query = this.tagSearchQuery.trim();
-        
+
         // Filter out already selected tags
-        const availableTags = this.filteredTagList.filter(tag => 
+        const availableTags = this.filteredTagList.filter(tag =>
             !this.currentModalTags.includes(tag.name)
         );
-        
+
         let html = '<div class="selectable-list" id="tagSelectableList">';
-        
+
         // Render filtered tags
         availableTags.forEach((tag, index) => {
             const isFocused = index === this.tagModalFocusIndex;
@@ -985,7 +992,7 @@ class QueueProcessor {
                 </div>
             `;
         });
-        
+
         // Add "Create new" option if query doesn't match exactly
         if (query && !this.allTags.some(t => t.name.toLowerCase() === query.toLowerCase())) {
             const createIndex = availableTags.length;
@@ -996,24 +1003,24 @@ class QueueProcessor {
                 </div>
             `;
         }
-        
+
         html += '</div>';
-        
+
         if (availableTags.length === 0 && !query) {
             return '<div class="empty-message">No more tags available</div>';
         }
-        
+
         return html;
     }
 
     filterTags(query) {
         this.tagSearchQuery = query;
-        
+
         if (!query.trim()) {
             this.filteredTagList = [...this.allTags];
         } else {
             const lowerQuery = query.toLowerCase();
-            this.filteredTagList = this.allTags.filter(tag => 
+            this.filteredTagList = this.allTags.filter(tag =>
                 tag.name.toLowerCase().includes(lowerQuery)
             );
         }
@@ -1023,12 +1030,12 @@ class QueueProcessor {
 
     handleTagModalKeyboard(e) {
         const query = this.tagSearchQuery.trim();
-        const availableTags = this.filteredTagList.filter(tag => 
+        const availableTags = this.filteredTagList.filter(tag =>
             !this.currentModalTags.includes(tag.name)
         );
         const hasCreateOption = query && !this.allTags.some(t => t.name.toLowerCase() === query.toLowerCase());
         const totalItems = availableTags.length + (hasCreateOption ? 1 : 0);
-        
+
         if (e.key === 'ArrowDown') {
             e.preventDefault();
             if (this.tagModalFocusIndex < totalItems - 1) {
@@ -1094,10 +1101,10 @@ class QueueProcessor {
                 console.error('Error creating tag:', error);
             }
         }
-        
+
         // Add tag to current selection
         this.addModalTag(tagName);
-        
+
         // Clear search and reset filter
         const searchInput = document.getElementById('tagSearchInput');
         searchInput.value = '';
@@ -1134,11 +1141,11 @@ class QueueProcessor {
 
     async saveTagsUpdate() {
         const targets = this.getTargetItems();
-        
+
         for (const item of targets) {
             await this.updateRawExpense(item.id, { tags: this.currentModalTags });
         }
-        
+
         this.currentModalTags = [];
         this.closeUpdateModal();
         this.renderListView();
@@ -1148,16 +1155,16 @@ class QueueProcessor {
         const targets = this.getTargetItems();
         const firstItem = targets[0];
         const currentType = firstItem.type || firstItem.suggested_type || 'discretionary';
-        
+
         this.typeOptions = [
             { value: 'fixed', label: 'Fixed' },
             { value: 'necessary variable', label: 'Necessary Variable' },
             { value: 'discretionary', label: 'Discretionary' }
         ];
-        
+
         this.typeModalFocusIndex = this.typeOptions.findIndex(opt => opt.value === currentType);
         if (this.typeModalFocusIndex < 0) this.typeModalFocusIndex = 2; // Default to discretionary
-        
+
         const modalHtml = `
             <div class="modal-overlay" id="updateModal" onclick="queueProcessor.closeUpdateModal()">
                 <div class="modal-content" onclick="event.stopPropagation()">
@@ -1180,9 +1187,9 @@ class QueueProcessor {
                 </div>
             </div>
         `;
-        
+
         document.body.insertAdjacentHTML('beforeend', modalHtml);
-        
+
         document.addEventListener('keydown', this.typeModalKeyHandler = (e) => this.handleTypeModalKeyboard(e));
     }
 
@@ -1200,7 +1207,7 @@ class QueueProcessor {
 
     handleTypeModalKeyboard(e) {
         if (!document.getElementById('updateModal')) return;
-        
+
         if (e.key === 'ArrowDown') {
             e.preventDefault();
             e.stopPropagation();
@@ -1232,16 +1239,16 @@ class QueueProcessor {
 
     async selectTypeFromList(type) {
         const targets = this.getTargetItems();
-        
+
         for (const item of targets) {
             await this.updateRawExpense(item.id, { type: type });
         }
-        
+
         if (this.typeModalKeyHandler) {
             document.removeEventListener('keydown', this.typeModalKeyHandler);
             this.typeModalKeyHandler = null;
         }
-        
+
         this.closeUpdateModal();
         this.renderListView();
     }
@@ -1250,7 +1257,7 @@ class QueueProcessor {
         const targets = this.getTargetItems();
         const firstItem = targets[0];
         const currentDescription = firstItem.description || firstItem.raw_description || '';
-        
+
         const modalHtml = `
             <div class="modal-overlay" id="updateModal" onclick="queueProcessor.closeUpdateModal()">
                 <div class="modal-content" onclick="event.stopPropagation()">
@@ -1273,15 +1280,15 @@ class QueueProcessor {
                 </div>
             </div>
         `;
-        
+
         document.body.insertAdjacentHTML('beforeend', modalHtml);
-        
+
         const textarea = document.getElementById('updateDescriptionInput');
         textarea.focus();
-        
+
         // Move cursor to end
         textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-        
+
         // Add Ctrl+Enter handler
         textarea.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -1294,11 +1301,11 @@ class QueueProcessor {
     async saveDescriptionUpdate() {
         const description = document.getElementById('updateDescriptionInput').value.trim();
         const targets = this.getTargetItems();
-        
+
         for (const item of targets) {
             await this.updateRawExpense(item.id, { description: description });
         }
-        
+
         this.closeUpdateModal();
         this.renderListView();
     }
@@ -1306,7 +1313,7 @@ class QueueProcessor {
     closeUpdateModal() {
         const modal = document.getElementById('updateModal');
         if (modal) modal.remove();
-        
+
         // Clean up type modal keyboard handler
         if (this.typeModalKeyHandler) {
             document.removeEventListener('keydown', this.typeModalKeyHandler);
@@ -1332,7 +1339,7 @@ class QueueProcessor {
     handleCheckboxClick(event, itemId, index) {
         event.stopPropagation();
         event.preventDefault();
-        
+
         if (event.shiftKey && this.selectedIndex !== null) {
             const start = Math.min(this.selectedIndex, index);
             const end = Math.max(this.selectedIndex, index);
@@ -1374,7 +1381,7 @@ class QueueProcessor {
             item.classList.toggle('focused', index === this.selectedIndex);
             item.classList.toggle('selected', this.selectedIds.has(itemId));
             item.classList.toggle('update-mode-active', isUpdateTarget);
-            
+
             const checkbox = item.querySelector('.checkbox-indicator');
             if (checkbox) {
                 checkbox.textContent = this.selectedIds.has(itemId) ? '✓' : '';
@@ -1385,7 +1392,7 @@ class QueueProcessor {
         if (selectAllCheckbox && this.queueItems.length > 0) {
             const allSelected = this.queueItems.every(item => this.selectedIds.has(item.id));
             const someSelected = this.queueItems.some(item => this.selectedIds.has(item.id));
-            
+
             selectAllCheckbox.checked = allSelected;
             selectAllCheckbox.indeterminate = someSelected && !allSelected;
         }
@@ -1450,7 +1457,7 @@ class QueueProcessor {
             const isUpdateTarget = this.updateMode && (
                 index === this.selectedIndex || this.selectedIds.has(item.id)
             );
-            
+
             // Determine merchant display
             let merchantDisplay, merchantClass = '';
             if (item.merchant_alias_id && item.merchant_alias) {
@@ -1462,10 +1469,10 @@ class QueueProcessor {
                 merchantDisplay = item.raw_merchant_name || 'Unknown';
                 merchantClass = 'missing-alias';
             }
-            
+
             // Determine description
             const description = item.description || item.raw_description || '';
-            
+
             // Determine category display
             let categoryDisplay = '', categoryClass = '';
             if (item.category_id && item.category) {
@@ -1478,14 +1485,14 @@ class QueueProcessor {
                 categoryDisplay = '—';
                 categoryClass = 'empty';
             }
-            
+
             // Determine type display
             const typeValue = item.type || item.suggested_type || '';
             const typeClass = typeValue.replace(' ', '-');
-            
+
             // Determine tags display
             const tags = item.tags && item.tags.length > 0 ? item.tags : [];
-            
+
             return `
             <div class="queue-list-item ${index === this.selectedIndex ? 'focused' : ''} ${this.selectedIds.has(item.id) ? 'selected' : ''} ${isUpdateTarget ? 'update-mode-active' : ''}" 
                  data-index="${index}"
@@ -1522,14 +1529,14 @@ class QueueProcessor {
                 <span class="shortcut"><kbd>C</kbd> Category</span>
                 <span class="shortcut"><kbd>E</kbd> Type</span>
                 <span class="shortcut"><kbd>T</kbd> Tags</span>
-                <span class="shortcut"><kbd>U</kbd> Exit</span>
+                <span class="shortcut"><kbd>Esc</kbd> Exit</span>
             </div>
         ` : '';
 
         document.getElementById('queueContent').innerHTML = `
             ${updateModeBar}
             <div class="queue-list-header">
-                <div>
+                <div class="queue-header-checkbox">
                     <input type="checkbox" id="selectAllCheckbox" title="Select all" onchange="queueProcessor.toggleSelectAll(this.checked)">
                 </div>
                 <div>Date</div>
@@ -1538,7 +1545,7 @@ class QueueProcessor {
                 <div>Category</div>
                 <div>Type</div>
                 <div>Tags</div>
-                <div>Amount</div>
+                <div class="queue-header-amount">Amount</div>
             </div>
             <div class="queue-list" id="queueList" tabindex="0">
                 ${listHtml}
@@ -1682,69 +1689,69 @@ class QueueProcessor {
         } else {
             idsToSave = this.selectedIds;
         }
-        
+
         const selectedItems = this.queueItems.filter(item => idsToSave.has(item.id));
-        
+
         // Check for items missing required fields
         const incomplete = selectedItems.filter(item => {
             const hasMerchant = item.merchant_alias_id || item.suggested_merchant_alias;
             const hasCategory = item.category_id || item.suggested_category_id;
             return !hasMerchant || !hasCategory;
         });
-        
+
         if (incomplete.length > 0) {
             alert(`${incomplete.length} item(s) are missing category or merchant. Please update them first using Update Mode (U).`);
             return;
         }
-        
+
         // Apply suggestions before saving
         for (const item of selectedItems) {
             if (!item.merchant_alias_id && item.suggested_merchant_alias) {
-                await this.updateRawExpense(item.id, { 
-                    merchant_alias_id: item.suggested_merchant_alias.id 
+                await this.updateRawExpense(item.id, {
+                    merchant_alias_id: item.suggested_merchant_alias.id
                 });
             }
             if (!item.category_id && item.suggested_category_id) {
-                await this.updateRawExpense(item.id, { 
+                await this.updateRawExpense(item.id, {
                     category_id: item.suggested_category_id,
                     type: item.type || item.suggested_type || 'discretionary'
                 });
             }
         }
-        
+
         const count = idsToSave.size;
         if (!confirm(`Save ${count} expense${count > 1 ? 's' : ''}?`)) return;
-        
+
         try {
             const response = await fetch('/api/queue/bulk-save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ raw_expense_ids: Array.from(idsToSave) })
             });
-            
+
             if (!response.ok) {
                 const error = await response.json();
                 throw new Error(error.detail || 'Bulk save failed');
             }
-            
+
             const result = await response.json();
-            
+
             this.queueItems = this.queueItems.filter(item => !idsToSave.has(item.id));
             this.selectedIds.clear();
-            
+
             if (this.selectedIndex >= this.queueItems.length && this.queueItems.length > 0) {
                 this.selectedIndex = this.queueItems.length - 1;
             }
-            
+
             await this.updateQueueCount();
             await this.detectDuplicates();
-            
+
             if (result.failed_count > 0) {
                 alert(`Saved ${result.saved_count} expense(s). ${result.failed_count} failed:\n${result.errors.join('\n')}`);
             } else {
                 alert(`Saved ${result.saved_count} expense(s) successfully!`);
             }
-            
+
             if (this.queueItems.length === 0) {
                 this.renderEmptyQueue();
             } else {
@@ -1782,11 +1789,11 @@ class QueueProcessor {
         this.duplicateModalItems = [
             { ...rawExpense, type: 'raw', isCurrentTransaction: true }
         ];
-        
+
         duplicates.forEach(dup => {
             this.duplicateModalItems.push(dup);
         });
-        
+
         this.duplicateModalFocusIndex = 0;
 
         const modalHtml = `
@@ -1827,10 +1834,10 @@ class QueueProcessor {
         modalContainer.id = 'duplicateModalContainer';
         modalContainer.innerHTML = modalHtml;
         document.body.appendChild(modalContainer);
-        
+
         this.duplicateModalKeyHandler = (e) => this.handleDuplicateModalKeyboard(e);
         document.addEventListener('keydown', this.duplicateModalKeyHandler);
-        
+
         this.scrollToFocusedDuplicate();
     }
 
@@ -1840,12 +1847,12 @@ class QueueProcessor {
             const isRaw = item.type === 'raw';
             const isFocused = index === this.duplicateModalFocusIndex;
             const isCurrentTransaction = item.isCurrentTransaction;
-            
+
             let cardClass = 'duplicate-card';
             if (isFocused) cardClass += ' focused';
             if (isSaved) cardClass += ' saved-transaction';
             if (isCurrentTransaction) cardClass += ' current-transaction';
-            
+
             let headerText = '';
             if (isCurrentTransaction) {
                 headerText = 'Current Transaction';
@@ -1854,7 +1861,7 @@ class QueueProcessor {
             } else {
                 headerText = 'Unprocessed';
             }
-            
+
             return `
                 <div class="${cardClass}" data-index="${index}" onclick="queueProcessor.focusDuplicateCard(${index})">
                     <div class="duplicate-card-header">
@@ -1925,7 +1932,7 @@ class QueueProcessor {
     scrollToFocusedDuplicate() {
         const container = document.getElementById('duplicateScrollContainer');
         const focusedCard = document.querySelector('.duplicate-card.focused');
-        
+
         if (container && focusedCard) {
             const containerRect = container.getBoundingClientRect();
             const cardRect = focusedCard.getBoundingClientRect();
@@ -1936,15 +1943,15 @@ class QueueProcessor {
 
     handleDuplicateModalKeyboard(e) {
         if (!document.getElementById('duplicateModal')) return;
-        
+
         if (e.key === 'Escape') {
             e.preventDefault();
             this.closeDuplicateModal();
             return;
         }
-        
+
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-        
+
         if (e.key === 'ArrowLeft') {
             e.preventDefault();
             if (this.duplicateModalFocusIndex > 0) {
@@ -1979,12 +1986,12 @@ class QueueProcessor {
         if (modalContainer) {
             modalContainer.remove();
         }
-        
+
         if (this.duplicateModalKeyHandler) {
             document.removeEventListener('keydown', this.duplicateModalKeyHandler);
             this.duplicateModalKeyHandler = null;
         }
-        
+
         this.duplicateModalItems = [];
         this.duplicateModalFocusIndex = 0;
     }
@@ -2003,12 +2010,12 @@ class QueueProcessor {
 
             this.queueItems = this.queueItems.filter(item => item.id !== rawExpenseId);
             delete this.duplicates[rawExpenseId];
-            
+
             for (const key in this.duplicates) {
                 this.duplicates[key].duplicates = this.duplicates[key].duplicates.filter(
                     dup => !(dup.type === 'raw' && dup.id === rawExpenseId)
                 );
-                
+
                 if (this.duplicates[key].duplicates.length === 0) {
                     delete this.duplicates[key];
                 }
