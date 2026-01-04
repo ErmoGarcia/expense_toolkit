@@ -1978,3 +1978,283 @@ input:checked+.slider:before {
     display: inline-block;
     pointer-events: none;
 }
+
+/* ==================== QUEUE PAGE IMPROVEMENTS ==================== */
+
+/* Updated Queue List Header - 8 columns */
+.queue-list-header {
+    display: grid;
+    grid-template-columns: 40px 100px 150px 1fr 120px 100px 120px 100px;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+    font-weight: 600;
+    color: #495057;
+}
+
+/* Updated Queue List Item - 8 columns */
+.queue-list-item {
+    display: grid;
+    grid-template-columns: 40px 100px 150px 1fr 120px 100px 120px 100px;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    cursor: pointer;
+    transition: background-color 0.15s, border-left 0.15s;
+    border-left: 3px solid transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Missing Alias - Yellow background for merchants without aliases */
+.missing-alias {
+    background-color: #fff3cd;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #ffc107;
+}
+
+/* Suggested Value - Italic styling for auto-suggested values */
+.suggested-value {
+    font-style: italic;
+    color: #6c757d;
+}
+
+/* Update Mode Active - Blue highlighting for rows in update mode */
+.queue-list-item.update-mode-active {
+    background-color: #cce5ff;
+    border-left-color: #007bff;
+}
+
+.queue-list-item.update-mode-active.focused {
+    background-color: #b8daff;
+}
+
+/* Update Mode Bar - Shortcuts bar at top */
+.update-mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0.75rem 1rem;
+    background-color: #007bff;
+    color: white;
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+}
+
+.update-mode-bar .mode-label {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.update-mode-bar .shortcut {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.update-mode-bar kbd {
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-family: monospace;
+}
+
+/* Queue Item Date Column */
+.queue-item-date {
+    color: #6c757d;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+/* Queue Item Description Column */
+.queue-item-description {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #495057;
+    font-size: 0.9rem;
+}
+
+/* Queue Item Category Column */
+.queue-item-category {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.queue-item-category.empty {
+    color: #adb5bd;
+}
+
+/* Queue Item Type Column */
+.queue-item-type {
+    display: flex;
+    align-items: center;
+}
+
+/* Type Badge Styling */
+.type-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.type-badge.fixed {
+    background-color: #e7d4ff;
+    color: #6f42c1;
+}
+
+.type-badge.necessary-variable,
+.type-badge.necessary {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.type-badge.discretionary {
+    background-color: #ffe5d0;
+    color: #d63384;
+}
+
+/* Queue Item Tags Column */
+.queue-item-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    align-items: center;
+    overflow: hidden;
+}
+
+/* Tag Pill for queue display */
+.tag-pill {
+    display: inline-block;
+    background-color: #e9ecef;
+    color: #495057;
+    padding: 0.15rem 0.4rem;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+
+/* Interactive Modal Lists */
+.category-list-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    margin-top: 0.5rem;
+}
+
+.selectable-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.selectable-item {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    border-bottom: 1px solid #f8f9fa;
+    transition: background-color 0.15s;
+    user-select: none;
+}
+
+.selectable-item:last-child {
+    border-bottom: none;
+}
+
+.selectable-item:hover {
+    background-color: #f8f9fa;
+}
+
+.selectable-item.focused {
+    background-color: #007bff;
+    color: white;
+}
+
+.selectable-item.focused .type-badge {
+    opacity: 0.95;
+}
+
+.selectable-item-child {
+    padding-left: 2rem;
+    font-size: 0.95rem;
+}
+
+.selectable-item-type {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+}
+
+.selectable-item-type .type-badge {
+    font-size: 0.9rem;
+    padding: 0.4rem 0.8rem;
+}
+
+.selectable-item-create {
+    color: #28a745;
+    font-style: italic;
+}
+
+.selectable-item-create:hover {
+    background-color: #d4edda;
+}
+
+.selectable-item-create.focused {
+    background-color: #28a745;
+    color: white;
+}
+
+/* Responsive Queue List for new columns */
+@media (max-width: 1024px) {
+    .queue-list-header,
+    .queue-list-item {
+        grid-template-columns: 40px 100px 120px 1fr 100px 80px 100px;
+    }
+
+    .queue-item-tags {
+        display: none;
+    }
+
+    .queue-list-header > div:nth-child(7) {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .queue-list-header,
+    .queue-list-item {
+        grid-template-columns: 40px 100px 1fr 80px;
+    }
+
+    .queue-item-merchant,
+    .queue-item-description,
+    .queue-item-category,
+    .queue-item-type,
+    .queue-item-tags,
+    .queue-list-header > div:nth-child(3),
+    .queue-list-header > div:nth-child(4),
+    .queue-list-header > div:nth-child(5),
+    .queue-list-header > div:nth-child(6),
+    .queue-list-header > div:nth-child(7) {
+        display: none;
+    }
+
+    .update-mode-bar {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+
+    .update-mode-bar .shortcut {
+        justify-content: center;
+    }
+}

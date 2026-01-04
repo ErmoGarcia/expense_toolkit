@@ -340,3 +340,44 @@ class ApplyRulesResponse(BaseModel):
     processed: int
     discarded: int
     saved: int
+
+
+# =============================================================================
+# Raw Expense Update Schemas (for queue update mode)
+# =============================================================================
+
+class RawExpenseUpdate(BaseModel):
+    """Schema for updating a raw expense in update mode"""
+    category_id: Optional[int] = Field(None, ge=1)
+    merchant_alias_id: Optional[int] = Field(None, ge=1)
+    type: Optional[str] = Field(None, pattern=r"^(fixed|necessary variable|discretionary)$")
+    tags: Optional[List[str]] = None
+    description: Optional[str] = Field(None, max_length=500)
+
+
+class BulkSaveRequest(BaseModel):
+    """Schema for simplified bulk save"""
+    raw_expense_ids: List[int] = Field(..., min_length=1)
+    
+    @field_validator("raw_expense_ids")
+    @classmethod
+    def validate_ids(cls, v: List[int]) -> List[int]:
+        if not v:
+            raise ValueError("At least one raw expense ID is required")
+        for id in v:
+            if id < 1:
+                raise ValueError("Invalid raw expense ID")
+        return v
+
+
+class BulkSaveResponse(BaseModel):
+    """Response for bulk save"""
+    message: str
+    saved_count: int
+    failed_count: int
+    errors: List[str] = Field(default_factory=list)
+
+
+class CategoryTypeResponse(BaseModel):
+    """Response for category type lookup"""
+    type: str

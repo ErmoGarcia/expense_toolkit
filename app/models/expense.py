@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, Date, Boolean, Float, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, Date, Boolean, Float, UniqueConstraint, Index, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from ..database import Base
@@ -19,8 +19,16 @@ class RawExpense(Base):
     type = Column(String, nullable=True)  # 'fixed', 'necessary variable', or 'discretionary'
     imported_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    # User-editable fields for update mode
+    tags = Column(JSON, default=list)  # List of tag names
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True)
+    merchant_alias_id = Column(Integer, ForeignKey("merchant_aliases.id", ondelete="SET NULL"), nullable=True, index=True)
+    description = Column(String, nullable=True)  # User-edited description
+    
     # Relationships
     bank_account = relationship("BankAccount")
+    category = relationship("Category")
+    merchant_alias = relationship("MerchantAlias")
     
     # Unique constraint
     __table_args__ = (

@@ -18,7 +18,11 @@ from ..schemas import (
     ProcessedExpenseResponse,
     ArchiveResponse,
     MergeResponse,
-    ApplyRulesResponse
+    ApplyRulesResponse,
+    RawExpenseUpdate,
+    BulkSaveRequest,
+    BulkSaveResponse,
+    CategoryTypeResponse
 )
 
 router = APIRouter()
@@ -41,49 +45,83 @@ async def get_next_raw_expense(db: Session = Depends(get_db)):
     return raw_expense
 
 @router.get("/all")
-async def get_all_raw_expenses(
-    date_from: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="End date (YYYY-MM-DD)"),
-    amount_min: Optional[float] = Query(None, ge=0, description="Minimum amount"),
-    amount_max: Optional[float] = Query(None, ge=0, description="Maximum amount"),
-    source: Optional[str] = Query(None, max_length=100, description="Filter by source"),
-    search: Optional[str] = Query(None, max_length=255, description="Search in merchant/description"),
-    db: Session = Depends(get_db)
-):
-    """Get all raw expenses to process (FIFO order) with optional filters"""
-    query = db.query(RawExpense).filter(
+async def get_all_raw_expenses(db: Session = Depends(get_db)):
+    """Get all raw expenses to process (FIFO order) with auto-suggestions"""
+    raw_expenses = db.query(RawExpense).filter(
         ~RawExpense.id.in_(
             db.query(Expense.raw_expense_id).filter(Expense.raw_expense_id.isnot(None))
         )
-    )
+    ).order_by(RawExpense.imported_at.asc()).all()
     
-    # Apply filters
-    if date_from:
-        query = query.filter(RawExpense.transaction_date >= date_from)
+    result = []
+    for raw in raw_expenses:
+        item = {
+            "id": raw.id,
+            "transaction_date": str(raw.transaction_date),
+            "amount": float(raw.amount),
+            "currency": raw.currency,
+            "raw_merchant_name": raw.raw_merchant_name,
+            "raw_description": raw.raw_description,
+            "source": raw.source,
+            # User-set values (from update mode)
+            "category_id": raw.category_id,
+            "merchant_alias_id": raw.merchant_alias_id,
+            "type": raw.type,
+            "tags": raw.tags or [],
+            "description": raw.description,
+            # Include set category info
+            "category": None,
+            # Include set merchant alias info
+            "merchant_alias": None,
+            # Suggestions
+            "suggested_merchant_alias": None,
+            "suggested_category_id": None,
+            "suggested_type": "discretionary"
+        }
+        
+        # Include set merchant alias info
+        if raw.merchant_alias_id:
+            merchant = db.query(MerchantAlias).filter(MerchantAlias.id == raw.merchant_alias_id).first()
+            if merchant:
+                item["merchant_alias"] = {
+                    "id": merchant.id,
+                    "display_name": merchant.display_name
+                }
+        
+        # Include set category info
+        if raw.category_id:
+            category = db.query(Category).filter(Category.id == raw.category_id).first()
+            if category:
+                item["category"] = {
+                    "id": category.id,
+                    "name": category.name
+                }
+        
+        # Auto-suggest merchant alias if not set
+        if not raw.merchant_alias_id and raw.raw_merchant_name:
+            merchant = db.query(MerchantAlias).filter(
+                MerchantAlias.raw_name == raw.raw_merchant_name
+            ).first()
+            if merchant:
+                item["suggested_merchant_alias"] = {
+                    "id": merchant.id,
+                    "display_name": merchant.display_name,
+                    "default_category_id": merchant.default_category_id
+                }
+                # Auto-suggest category from merchant
+                if merchant.default_category_id:
+                    item["suggested_category_id"] = merchant.default_category_id
+                    # Auto-suggest type from category history
+                    type_expense = db.query(Expense).filter(
+                        Expense.category_id == merchant.default_category_id,
+                        Expense.type.isnot(None)
+                    ).order_by(Expense.created_at.desc()).first()
+                    if type_expense and type_expense.type:
+                        item["suggested_type"] = type_expense.type
+        
+        result.append(item)
     
-    if date_to:
-        query = query.filter(RawExpense.transaction_date <= date_to)
-    
-    if amount_min is not None:
-        query = query.filter(RawExpense.amount >= Decimal(str(amount_min)))
-    
-    if amount_max is not None:
-        query = query.filter(RawExpense.amount <= Decimal(str(amount_max)))
-    
-    if source:
-        query = query.filter(RawExpense.source == source)
-    
-    if search:
-        # Escape SQL wildcards
-        escaped_search = search.replace("%", r"\%").replace("_", r"\_")
-        query = query.filter(
-            (RawExpense.raw_merchant_name.contains(escaped_search)) |
-            (RawExpense.raw_description.contains(escaped_search))
-        )
-    
-    raw_expenses = query.order_by(RawExpense.imported_at.asc()).all()
-    
-    return raw_expenses
+    return result
 
 @router.get("/count", response_model=QueueCountResponse)
 async def get_queue_count(db: Session = Depends(get_db)):
@@ -589,4 +627,158 @@ async def merge_expenses(data: MergeExpensesRequest, db: Session = Depends(get_d
         "message": f"Successfully merged {len(raw_expenses)} expenses",
         "expense_id": merged_expense.id,
         "archived_raw_expense_ids": raw_expense_ids
+    }
+
+
+@router.put("/{raw_expense_id}")
+async def update_raw_expense(
+    raw_expense_id: int,
+    data: RawExpenseUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a raw expense's editable fields (for update mode)"""
+    raw_expense = db.query(RawExpense).filter(RawExpense.id == raw_expense_id).first()
+    if not raw_expense:
+        raise HTTPException(status_code=404, detail="Raw expense not found")
+    
+    # Check if already processed
+    existing = db.query(Expense).filter(Expense.raw_expense_id == raw_expense_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Raw expense already processed")
+    
+    # Update fields if provided
+    if data.category_id is not None:
+        # Validate category exists
+        category = db.query(Category).filter(Category.id == data.category_id).first()
+        if not category:
+            raise HTTPException(status_code=400, detail="Category not found")
+        raw_expense.category_id = data.category_id
+    
+    if data.merchant_alias_id is not None:
+        # Validate merchant exists
+        merchant = db.query(MerchantAlias).filter(MerchantAlias.id == data.merchant_alias_id).first()
+        if not merchant:
+            raise HTTPException(status_code=400, detail="Merchant not found")
+        raw_expense.merchant_alias_id = data.merchant_alias_id
+    
+    if data.type is not None:
+        raw_expense.type = data.type
+    
+    if data.tags is not None:
+        raw_expense.tags = data.tags
+    
+    if data.description is not None:
+        raw_expense.description = data.description
+    
+    db.commit()
+    db.refresh(raw_expense)
+    
+    return {"message": "Raw expense updated successfully", "id": raw_expense.id}
+
+
+@router.get("/category-type/{category_id}", response_model=CategoryTypeResponse)
+async def get_category_type(category_id: int, db: Session = Depends(get_db)):
+    """Get the last used expense type for a category"""
+    # Find most recent expense with this category
+    expense = db.query(Expense).filter(
+        Expense.category_id == category_id,
+        Expense.type.isnot(None)
+    ).order_by(Expense.created_at.desc()).first()
+    
+    if expense and expense.type:
+        return {"type": expense.type}
+    
+    return {"type": "discretionary"}  # Default
+
+
+@router.post("/bulk-save", response_model=BulkSaveResponse)
+async def bulk_save_raw_expenses(data: BulkSaveRequest, db: Session = Depends(get_db)):
+    """Bulk save raw expenses using their stored category, merchant, type, tags"""
+    saved_count = 0
+    failed_count = 0
+    errors = []
+    
+    for raw_id in data.raw_expense_ids:
+        raw_expense = db.query(RawExpense).filter(RawExpense.id == raw_id).first()
+        if not raw_expense:
+            errors.append(f"Raw expense {raw_id} not found")
+            failed_count += 1
+            continue
+        
+        # Check already processed
+        existing = db.query(Expense).filter(Expense.raw_expense_id == raw_id).first()
+        if existing:
+            errors.append(f"Raw expense {raw_id} already processed")
+            failed_count += 1
+            continue
+        
+        # Check required fields - use stored or fall back to suggestions
+        category_id = raw_expense.category_id
+        merchant_alias_id = raw_expense.merchant_alias_id
+        
+        # If merchant not set, try to get from suggestion (via raw_merchant_name)
+        if not merchant_alias_id and raw_expense.raw_merchant_name:
+            merchant = db.query(MerchantAlias).filter(
+                MerchantAlias.raw_name == raw_expense.raw_merchant_name
+            ).first()
+            if merchant:
+                merchant_alias_id = merchant.id
+                # Also get category from merchant if not set
+                if not category_id and merchant.default_category_id:
+                    category_id = merchant.default_category_id
+        
+        # Validate required fields
+        if not category_id:
+            errors.append(f"Raw expense {raw_id} missing category")
+            failed_count += 1
+            continue
+        
+        if not merchant_alias_id:
+            errors.append(f"Raw expense {raw_id} missing merchant")
+            failed_count += 1
+            continue
+        
+        # Get type - use stored, or get from category history, or default
+        expense_type = raw_expense.type
+        if not expense_type:
+            type_expense = db.query(Expense).filter(
+                Expense.category_id == category_id,
+                Expense.type.isnot(None)
+            ).order_by(Expense.created_at.desc()).first()
+            expense_type = type_expense.type if type_expense and type_expense.type else "discretionary"
+        
+        # Create expense
+        expense = Expense(
+            raw_expense_id=raw_id,
+            bank_account_id=raw_expense.bank_account_id,
+            transaction_date=raw_expense.transaction_date,
+            amount=raw_expense.amount,
+            currency=raw_expense.currency,
+            merchant_alias_id=merchant_alias_id,
+            category_id=category_id,
+            description=raw_expense.description or raw_expense.raw_description or "",
+            type=expense_type
+        )
+        db.add(expense)
+        db.flush()
+        
+        # Handle tags
+        for tag_name in (raw_expense.tags or []):
+            tag = db.query(Tag).filter(Tag.name == tag_name).first()
+            if not tag:
+                tag = Tag(name=tag_name)
+                db.add(tag)
+                db.flush()
+            expense_tag = ExpenseTag(expense_id=expense.id, tag_id=tag.id)
+            db.add(expense_tag)
+        
+        saved_count += 1
+    
+    db.commit()
+    
+    return {
+        "message": "Bulk save completed",
+        "saved_count": saved_count,
+        "failed_count": failed_count,
+        "errors": errors
     }
