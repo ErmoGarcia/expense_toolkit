@@ -216,6 +216,18 @@ class QueueProcessor {
         this.categoryTypeCache = {};
         this.currentModalTags = [];
 
+        // Filter mode state
+        this.filterMode = false;
+        this.activeFilters = {
+            dateFrom: null,
+            dateTo: null,
+            merchant: null,
+            amountMin: null,
+            amountMax: null
+        };
+        this.originalQueueItems = [];
+        this.filterModalKeyHandler = null;
+
         this.init();
     }
 
@@ -299,11 +311,18 @@ class QueueProcessor {
             const data = await response.json();
 
             if (Array.isArray(data) && data.length > 0) {
-                this.queueItems = data;
+                this.originalQueueItems = [...data];
+                this.queueItems = [...data];
                 this.selectedIndex = 0;
                 this.selectedIds.clear();
-                this.renderListView();
+                // Apply any existing filters
+                if (this.hasActiveFilters()) {
+                    this.applyFilters();
+                } else {
+                    this.renderListView();
+                }
             } else {
+                this.originalQueueItems = [];
                 this.queueItems = [];
                 this.renderEmptyQueue();
             }
@@ -321,18 +340,28 @@ class QueueProcessor {
 
                 if (document.getElementById('updateModal')) {
                     this.closeUpdateModal();
+                } else if (document.getElementById('filterModal')) {
+                    this.closeFilterModal();
                 } else if (this.viewMode === 'merge') {
                     this.closeMergeModal();
                 } else if (document.getElementById('duplicateModal')) {
                     this.closeDuplicateModal();
                 } else if (this.viewMode === 'list') {
-                    // If there are selected items, clear them first (stay in update mode if active)
+                    // If there are selected items, clear them first (stay in update/filter mode if active)
                     if (this.selectedIds.size > 0) {
                         this.clearSelection();
                     }
                     // If no items selected and in update mode, exit update mode
                     else if (this.updateMode) {
                         this.exitUpdateMode();
+                    }
+                    // If no items selected and in filter mode, exit filter mode
+                    else if (this.filterMode) {
+                        this.exitFilterMode();
+                    }
+                    // If not in any mode but filters are active, clear all filters
+                    else if (this.hasActiveFilters()) {
+                        this.clearAllFilters();
                     }
                 }
                 return;
@@ -343,8 +372,8 @@ class QueueProcessor {
                 return;
             }
 
-            // Ignore other keys if an update modal is open (except Escape, which is handled above)
-            if (document.getElementById('updateModal')) {
+            // Ignore other keys if a modal is open (except Escape, which is handled above)
+            if (document.getElementById('updateModal') || document.getElementById('filterModal')) {
                 return;
             }
 
@@ -357,15 +386,40 @@ class QueueProcessor {
     }
 
     handleListKeyboard(e) {
-        // Update mode toggle - available even with no items or selection
-        if (e.key === 'u' || e.key === 'U') {
+        // Update mode toggle - available even with no items or selection (but not in filter mode)
+        if ((e.key === 'u' || e.key === 'U') && !this.filterMode) {
             e.preventDefault();
             this.toggleUpdateMode();
             return;
         }
 
+        // Filter mode toggle - available even with no items or selection (but not in update mode)
+        if ((e.key === 'f' || e.key === 'F') && !this.updateMode) {
+            e.preventDefault();
+            this.toggleFilterMode();
+            return;
+        }
+
         // Navigation requires items
         if (this.queueItems.length === 0) {
+            // Filter mode shortcuts work even with no items (to allow clearing filters)
+            if (this.filterMode) {
+                if (e.key === 'd') {
+                    e.preventDefault();
+                    this.openDateFilterModal();
+                    return;
+                }
+                if (e.key === 'm') {
+                    e.preventDefault();
+                    this.openMerchantFilterModal();
+                    return;
+                }
+                if (e.key === 'a') {
+                    e.preventDefault();
+                    this.openAmountFilterModal();
+                    return;
+                }
+            }
             return;
         }
 
@@ -414,6 +468,26 @@ class QueueProcessor {
                 this.toggleSelection(this.queueItems[this.selectedIndex].id);
             }
             return;
+        }
+
+        // Filter mode shortcuts
+        if (this.filterMode) {
+            if (e.key === 'd') {
+                e.preventDefault();
+                this.openDateFilterModal();
+                return;
+            }
+            if (e.key === 'm') {
+                e.preventDefault();
+                this.openMerchantFilterModal();
+                return;
+            }
+            if (e.key === 'a') {
+                e.preventDefault();
+                this.openAmountFilterModal();
+                return;
+            }
+            return; // Don't process other keys in filter mode
         }
 
         // Update mode shortcuts
@@ -1321,6 +1395,676 @@ class QueueProcessor {
         }
     }
 
+    // ==================== FILTER MODE ====================
+
+    toggleFilterMode() {
+        this.filterMode = !this.filterMode;
+        this.renderListView();
+    }
+
+    exitFilterMode() {
+        this.filterMode = false;
+        this.renderListView();
+    }
+
+    hasActiveFilters() {
+        return this.activeFilters.dateFrom !== null ||
+            this.activeFilters.dateTo !== null ||
+            this.activeFilters.merchant !== null ||
+            this.activeFilters.amountMin !== null ||
+            this.activeFilters.amountMax !== null;
+    }
+
+    clearAllFilters() {
+        this.activeFilters = {
+            dateFrom: null,
+            dateTo: null,
+            merchant: null,
+            amountMin: null,
+            amountMax: null
+        };
+        this.queueItems = [...this.originalQueueItems];
+        this.selectedIndex = 0;
+        this.selectedIds.clear();
+        this.renderListView();
+    }
+
+    clearFilter(filterType) {
+        if (filterType === 'date') {
+            this.activeFilters.dateFrom = null;
+            this.activeFilters.dateTo = null;
+        } else if (filterType === 'merchant') {
+            this.activeFilters.merchant = null;
+        } else if (filterType === 'amount') {
+            this.activeFilters.amountMin = null;
+            this.activeFilters.amountMax = null;
+        }
+        this.applyFilters();
+    }
+
+    applyFilters() {
+        let filtered = [...this.originalQueueItems];
+
+        // Date filter
+        if (this.activeFilters.dateFrom) {
+            filtered = filtered.filter(item => {
+                const itemDate = new Date(item.transaction_date);
+                return itemDate >= this.activeFilters.dateFrom;
+            });
+        }
+        if (this.activeFilters.dateTo) {
+            filtered = filtered.filter(item => {
+                const itemDate = new Date(item.transaction_date);
+                return itemDate <= this.activeFilters.dateTo;
+            });
+        }
+
+        // Merchant filter
+        if (this.activeFilters.merchant) {
+            filtered = filtered.filter(item => {
+                const merchant = item.merchant_alias?.display_name || item.raw_merchant_name;
+                return merchant === this.activeFilters.merchant;
+            });
+        }
+
+        // Amount filter (use absolute values so -22 is in range 20-30)
+        if (this.activeFilters.amountMin !== null) {
+            filtered = filtered.filter(item =>
+                Math.abs(parseFloat(item.amount)) >= this.activeFilters.amountMin
+            );
+        }
+        if (this.activeFilters.amountMax !== null) {
+            filtered = filtered.filter(item =>
+                Math.abs(parseFloat(item.amount)) <= this.activeFilters.amountMax
+            );
+        }
+
+        this.queueItems = filtered;
+        this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.queueItems.length - 1));
+
+        // Clear selection of items no longer in filtered list
+        const filteredIds = new Set(filtered.map(item => item.id));
+        this.selectedIds = new Set([...this.selectedIds].filter(id => filteredIds.has(id)));
+
+        this.renderListView();
+    }
+
+    getUniqueMerchants() {
+        const merchants = new Set();
+        this.originalQueueItems.forEach(item => {
+            if (item.merchant_alias?.display_name) {
+                merchants.add(item.merchant_alias.display_name);
+            } else if (item.raw_merchant_name) {
+                merchants.add(item.raw_merchant_name);
+            }
+        });
+        return Array.from(merchants).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    }
+
+    closeFilterModal() {
+        const modal = document.getElementById('filterModal');
+        if (modal) modal.remove();
+
+        if (this.filterModalKeyHandler) {
+            document.removeEventListener('keydown', this.filterModalKeyHandler);
+            this.filterModalKeyHandler = null;
+        }
+    }
+
+    // ==================== DATE FILTER MODAL ====================
+
+    openDateFilterModal() {
+        // Initialize date input states
+        this.dateFromDigits = this.activeFilters.dateFrom
+            ? this.convertDateToDigits(this.activeFilters.dateFrom)
+            : '';
+        this.dateToInputDigits = this.activeFilters.dateTo
+            ? this.convertDateToDigits(this.activeFilters.dateTo)
+            : '';
+        this.dateFocusedField = 'from'; // 'from' or 'to'
+
+        const modalHtml = `
+            <div class="modal-overlay" id="filterModal" onclick="queueProcessor.closeFilterModal()">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Filter by Date Range</h2>
+                        <button class="modal-close" onclick="queueProcessor.closeFilterModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>From Date</label>
+                            <div class="date-input-container ${this.dateFocusedField === 'from' ? 'focused' : ''}" id="dateFromContainer" onclick="queueProcessor.focusDateField('from')">
+                                ${this.renderDateInput(this.dateFromDigits)}
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>To Date</label>
+                            <div class="date-input-container ${this.dateFocusedField === 'to' ? 'focused' : ''}" id="dateToContainer" onclick="queueProcessor.focusDateField('to')">
+                                ${this.renderDateInput(this.dateToInputDigits)}
+                            </div>
+                        </div>
+                        <p class="form-hint">Format: DD-MM-YY or DD-MM-YYYY</p>
+                    </div>
+                    <div class="modal-footer">
+                        <div class="keyboard-hints">
+                            <span class="keyboard-hint">Up/Down Navigate</span>
+                            <span class="keyboard-hint">Enter Apply</span>
+                            <span class="keyboard-hint">Esc Cancel</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="queueProcessor.applyDateFilter()">Apply</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        this.filterModalKeyHandler = (e) => this.handleDateModalKeyboard(e);
+        document.addEventListener('keydown', this.filterModalKeyHandler);
+    }
+
+    convertDateToDigits(date) {
+        if (!date) return '';
+        const d = new Date(date);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = String(d.getFullYear());
+        return day + month + year;
+    }
+
+    digitsToDate(digits) {
+        if (digits.length < 6) return null;
+        const day = parseInt(digits.substring(0, 2), 10);
+        const month = parseInt(digits.substring(2, 4), 10);
+        let year = parseInt(digits.substring(4), 10);
+
+        // Handle 2-digit year
+        if (year < 100) {
+            year = year < 50 ? 2000 + year : 1900 + year;
+        }
+
+        // Validate
+        if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+        const date = new Date(year, month - 1, day);
+        // Check if date is valid (e.g., Feb 30 would roll over)
+        if (date.getDate() !== day || date.getMonth() !== month - 1) return null;
+
+        return date;
+    }
+
+    renderDateInput(digits) {
+        const day = digits.substring(0, 2).padEnd(2, '_');
+        const month = digits.substring(2, 4).padEnd(2, '_');
+        const year = digits.substring(4).padEnd(digits.length > 6 ? 4 : 2, '_');
+
+        return `
+            <span class="date-segment">${escapeHtml(day)}</span>
+            <span class="date-separator">-</span>
+            <span class="date-segment">${escapeHtml(month)}</span>
+            <span class="date-separator">-</span>
+            <span class="date-segment">${escapeHtml(year || '__')}</span>
+        `;
+    }
+
+    focusDateField(field) {
+        this.dateFocusedField = field;
+        this.updateDateModalUI();
+    }
+
+    updateDateModalUI() {
+        const fromContainer = document.getElementById('dateFromContainer');
+        const toContainer = document.getElementById('dateToContainer');
+
+        if (fromContainer) {
+            fromContainer.classList.toggle('focused', this.dateFocusedField === 'from');
+            fromContainer.innerHTML = this.renderDateInput(this.dateFromDigits);
+        }
+        if (toContainer) {
+            toContainer.classList.toggle('focused', this.dateFocusedField === 'to');
+            toContainer.innerHTML = this.renderDateInput(this.dateToInputDigits);
+        }
+    }
+
+    handleDateModalKeyboard(e) {
+        if (!document.getElementById('filterModal')) return;
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            this.dateFocusedField = 'from';
+            this.updateDateModalUI();
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            this.dateFocusedField = 'to';
+            this.updateDateModalUI();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            this.applyDateFilter();
+        } else if (e.key === 'Backspace') {
+            e.preventDefault();
+            if (this.dateFocusedField === 'from' && this.dateFromDigits.length > 0) {
+                this.dateFromDigits = this.dateFromDigits.slice(0, -1);
+            } else if (this.dateFocusedField === 'to' && this.dateToInputDigits.length > 0) {
+                this.dateToInputDigits = this.dateToInputDigits.slice(0, -1);
+            }
+            this.updateDateModalUI();
+        } else if (/^[0-9]$/.test(e.key)) {
+            e.preventDefault();
+            const maxLen = 8; // DD-MM-YYYY
+            if (this.dateFocusedField === 'from' && this.dateFromDigits.length < maxLen) {
+                this.dateFromDigits += e.key;
+            } else if (this.dateFocusedField === 'to' && this.dateToInputDigits.length < maxLen) {
+                this.dateToInputDigits += e.key;
+            }
+            this.updateDateModalUI();
+        }
+    }
+
+    applyDateFilter() {
+        let fromDate = null;
+        let toDate = null;
+
+        if (this.dateFromDigits.length >= 6) {
+            fromDate = this.digitsToDate(this.dateFromDigits);
+            if (!fromDate) {
+                alert('Invalid "From" date. Please use DD-MM-YY or DD-MM-YYYY format.');
+                return;
+            }
+        }
+
+        if (this.dateToInputDigits.length >= 6) {
+            toDate = this.digitsToDate(this.dateToInputDigits);
+            if (!toDate) {
+                alert('Invalid "To" date. Please use DD-MM-YY or DD-MM-YYYY format.');
+                return;
+            }
+        }
+
+        // Validate from <= to
+        if (fromDate && toDate && fromDate > toDate) {
+            alert('"From" date must be before or equal to "To" date.');
+            return;
+        }
+
+        this.activeFilters.dateFrom = fromDate;
+        this.activeFilters.dateTo = toDate;
+
+        this.closeFilterModal();
+        this.applyFilters();
+    }
+
+    // ==================== MERCHANT FILTER MODAL ====================
+
+    openMerchantFilterModal() {
+        this.allFilterMerchants = this.getUniqueMerchants();
+        this.filteredMerchantFilterList = [...this.allFilterMerchants];
+        this.merchantFilterFocusIndex = 0;
+        this.merchantFilterSearchQuery = '';
+
+        // Pre-select current filter if set
+        if (this.activeFilters.merchant) {
+            const idx = this.filteredMerchantFilterList.indexOf(this.activeFilters.merchant);
+            if (idx >= 0) this.merchantFilterFocusIndex = idx;
+        }
+
+        const modalHtml = `
+            <div class="modal-overlay" id="filterModal" onclick="queueProcessor.closeFilterModal()">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Filter by Merchant</h2>
+                        <button class="modal-close" onclick="queueProcessor.closeFilterModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label for="merchantFilterSearchInput">Search Merchants</label>
+                            <input type="text" id="merchantFilterSearchInput" placeholder="Type to filter..." autofocus>
+                        </div>
+                        <div class="category-list-container" id="merchantFilterListContainer">
+                            ${this.renderMerchantFilterList()}
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <div class="keyboard-hints">
+                            <span class="keyboard-hint">Up/Down Navigate</span>
+                            <span class="keyboard-hint">Enter Select</span>
+                            <span class="keyboard-hint">Esc Cancel</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const searchInput = document.getElementById('merchantFilterSearchInput');
+        searchInput.addEventListener('input', (e) => this.filterMerchantFilterList(e.target.value));
+        searchInput.addEventListener('keydown', (e) => this.handleMerchantFilterModalKeyboard(e));
+        searchInput.focus();
+    }
+
+    renderMerchantFilterList() {
+        if (this.filteredMerchantFilterList.length === 0) {
+            return '<div class="empty-message">No merchants found</div>';
+        }
+
+        let html = '<div class="selectable-list" id="merchantFilterSelectableList">';
+
+        // Add "Clear filter" option at the top if a filter is active
+        if (this.activeFilters.merchant) {
+            const isFocused = this.merchantFilterFocusIndex === -1;
+            html += `
+                <div class="selectable-item selectable-item-clear ${isFocused ? 'focused' : ''}" data-index="-1" onclick="queueProcessor.selectMerchantFilter(null)">
+                    <em>Clear merchant filter</em>
+                </div>
+            `;
+        }
+
+        this.filteredMerchantFilterList.forEach((merchant, index) => {
+            const isFocused = index === this.merchantFilterFocusIndex;
+            const isCurrentFilter = merchant === this.activeFilters.merchant;
+            html += `
+                <div class="selectable-item ${isFocused ? 'focused' : ''} ${isCurrentFilter ? 'current-filter' : ''}" data-index="${index}" onclick="queueProcessor.selectMerchantFilter('${escapeJs(merchant)}')">
+                    ${escapeHtml(merchant)}
+                    ${isCurrentFilter ? '<span class="filter-active-indicator">active</span>' : ''}
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        return html;
+    }
+
+    filterMerchantFilterList(query) {
+        this.merchantFilterSearchQuery = query;
+
+        if (!query.trim()) {
+            this.filteredMerchantFilterList = [...this.allFilterMerchants];
+        } else {
+            const lowerQuery = query.toLowerCase();
+            this.filteredMerchantFilterList = this.allFilterMerchants.filter(merchant =>
+                merchant.toLowerCase().includes(lowerQuery)
+            );
+        }
+        this.merchantFilterFocusIndex = 0;
+        document.getElementById('merchantFilterListContainer').innerHTML = this.renderMerchantFilterList();
+    }
+
+    handleMerchantFilterModalKeyboard(e) {
+        const hasClearOption = this.activeFilters.merchant !== null;
+        const totalItems = this.filteredMerchantFilterList.length + (hasClearOption ? 1 : 0);
+        const minIndex = hasClearOption ? -1 : 0;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (this.merchantFilterFocusIndex < this.filteredMerchantFilterList.length - 1) {
+                this.merchantFilterFocusIndex++;
+                this.updateMerchantFilterListUI();
+                this.scrollToFocusedMerchantFilter();
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (this.merchantFilterFocusIndex > minIndex) {
+                this.merchantFilterFocusIndex--;
+                this.updateMerchantFilterListUI();
+                this.scrollToFocusedMerchantFilter();
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (this.merchantFilterFocusIndex === -1) {
+                this.selectMerchantFilter(null);
+            } else if (this.filteredMerchantFilterList.length > 0) {
+                const merchant = this.filteredMerchantFilterList[this.merchantFilterFocusIndex];
+                this.selectMerchantFilter(merchant);
+            }
+        }
+    }
+
+    updateMerchantFilterListUI() {
+        const items = document.querySelectorAll('#merchantFilterSelectableList .selectable-item');
+        const hasClearOption = this.activeFilters.merchant !== null;
+
+        items.forEach((item, idx) => {
+            const itemIndex = hasClearOption ? idx - 1 : idx;
+            item.classList.toggle('focused', itemIndex === this.merchantFilterFocusIndex);
+        });
+    }
+
+    scrollToFocusedMerchantFilter() {
+        const focused = document.querySelector('#merchantFilterSelectableList .selectable-item.focused');
+        if (focused) {
+            focused.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    selectMerchantFilter(merchant) {
+        this.activeFilters.merchant = merchant;
+        this.closeFilterModal();
+        this.applyFilters();
+    }
+
+    // ==================== AMOUNT FILTER MODAL ====================
+
+    openAmountFilterModal() {
+        this.amountMinValue = this.activeFilters.amountMin !== null
+            ? this.activeFilters.amountMin.toFixed(2)
+            : '';
+        this.amountMaxValue = this.activeFilters.amountMax !== null
+            ? this.activeFilters.amountMax.toFixed(2)
+            : '';
+        this.amountFocusedField = 'min'; // 'min' or 'max'
+
+        const modalHtml = `
+            <div class="modal-overlay" id="filterModal" onclick="queueProcessor.closeFilterModal()">
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Filter by Amount Range</h2>
+                        <button class="modal-close" onclick="queueProcessor.closeFilterModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>Min Amount</label>
+                            <div class="amount-input-wrapper ${this.amountFocusedField === 'min' ? 'focused' : ''}" id="amountMinContainer" onclick="queueProcessor.focusAmountField('min')">
+                                <span class="currency-symbol">£</span>
+                                <input type="text" class="amount-input" id="amountMinInput" value="${escapeHtml(this.amountMinValue)}" placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Max Amount</label>
+                            <div class="amount-input-wrapper ${this.amountFocusedField === 'max' ? 'focused' : ''}" id="amountMaxContainer" onclick="queueProcessor.focusAmountField('max')">
+                                <span class="currency-symbol">£</span>
+                                <input type="text" class="amount-input" id="amountMaxInput" value="${escapeHtml(this.amountMaxValue)}" placeholder="0.00">
+                            </div>
+                        </div>
+                        <p class="form-hint">Leave empty for no limit. Filters by absolute value (e.g., 20-30 matches both £25 and -£25).</p>
+                    </div>
+                    <div class="modal-footer">
+                        <div class="keyboard-hints">
+                            <span class="keyboard-hint">Up/Down Navigate</span>
+                            <span class="keyboard-hint">Enter Apply</span>
+                            <span class="keyboard-hint">Esc Cancel</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="queueProcessor.applyAmountFilter()">Apply</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        const minInput = document.getElementById('amountMinInput');
+        const maxInput = document.getElementById('amountMaxInput');
+
+        minInput.addEventListener('focus', () => this.focusAmountField('min'));
+        maxInput.addEventListener('focus', () => this.focusAmountField('max'));
+
+        // Allow only valid amount characters (positive numbers only since we filter by absolute value)
+        const validateAmountInput = (e) => {
+            const input = e.target;
+            let value = input.value;
+
+            // Remove invalid characters (only allow digits and decimal point)
+            value = value.replace(/[^0-9.]/g, '');
+
+            // Ensure only one decimal point
+            const parts = value.split('.');
+            if (parts.length > 2) {
+                value = parts[0] + '.' + parts.slice(1).join('');
+            }
+
+            // Limit decimal places to 2
+            if (parts.length === 2 && parts[1].length > 2) {
+                value = parts[0] + '.' + parts[1].substring(0, 2);
+            }
+
+            input.value = value;
+        };
+
+        minInput.addEventListener('input', validateAmountInput);
+        maxInput.addEventListener('input', validateAmountInput);
+
+        this.filterModalKeyHandler = (e) => this.handleAmountModalKeyboard(e);
+        document.addEventListener('keydown', this.filterModalKeyHandler);
+
+        minInput.focus();
+    }
+
+    focusAmountField(field) {
+        this.amountFocusedField = field;
+        const minContainer = document.getElementById('amountMinContainer');
+        const maxContainer = document.getElementById('amountMaxContainer');
+
+        if (minContainer) minContainer.classList.toggle('focused', field === 'min');
+        if (maxContainer) maxContainer.classList.toggle('focused', field === 'max');
+
+        if (field === 'min') {
+            document.getElementById('amountMinInput')?.focus();
+        } else {
+            document.getElementById('amountMaxInput')?.focus();
+        }
+    }
+
+    handleAmountModalKeyboard(e) {
+        if (!document.getElementById('filterModal')) return;
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            this.focusAmountField('min');
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            this.focusAmountField('max');
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            this.applyAmountFilter();
+        }
+    }
+
+    applyAmountFilter() {
+        const minInput = document.getElementById('amountMinInput');
+        const maxInput = document.getElementById('amountMaxInput');
+
+        let minValue = null;
+        let maxValue = null;
+
+        if (minInput.value.trim() !== '') {
+            minValue = parseFloat(minInput.value);
+            if (isNaN(minValue)) {
+                alert('Invalid min amount. Please enter a valid number.');
+                return;
+            }
+        }
+
+        if (maxInput.value.trim() !== '') {
+            maxValue = parseFloat(maxInput.value);
+            if (isNaN(maxValue)) {
+                alert('Invalid max amount. Please enter a valid number.');
+                return;
+            }
+        }
+
+        // Validate min <= max
+        if (minValue !== null && maxValue !== null && minValue > maxValue) {
+            alert('Min amount must be less than or equal to max amount.');
+            return;
+        }
+
+        this.activeFilters.amountMin = minValue;
+        this.activeFilters.amountMax = maxValue;
+
+        this.closeFilterModal();
+        this.applyFilters();
+    }
+
+    // ==================== FILTER DISPLAY HELPERS ====================
+
+    formatDateFilterDisplay(date) {
+        if (!date) return '';
+        const d = new Date(date);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = String(d.getFullYear()).slice(-2);
+        return `${day}-${month}-${year}`;
+    }
+
+    getActiveFiltersHtml() {
+        if (!this.hasActiveFilters()) return '';
+
+        let badges = [];
+
+        // Date filter badge
+        if (this.activeFilters.dateFrom || this.activeFilters.dateTo) {
+            let dateText = 'Date: ';
+            if (this.activeFilters.dateFrom && this.activeFilters.dateTo) {
+                dateText += `${this.formatDateFilterDisplay(this.activeFilters.dateFrom)} to ${this.formatDateFilterDisplay(this.activeFilters.dateTo)}`;
+            } else if (this.activeFilters.dateFrom) {
+                dateText += `from ${this.formatDateFilterDisplay(this.activeFilters.dateFrom)}`;
+            } else {
+                dateText += `to ${this.formatDateFilterDisplay(this.activeFilters.dateTo)}`;
+            }
+            badges.push(`
+                <span class="filter-badge">
+                    ${escapeHtml(dateText)}
+                    <button type="button" onclick="queueProcessor.clearFilter('date')" title="Clear date filter">x</button>
+                </span>
+            `);
+        }
+
+        // Merchant filter badge
+        if (this.activeFilters.merchant) {
+            badges.push(`
+                <span class="filter-badge">
+                    Merchant: ${escapeHtml(this.activeFilters.merchant)}
+                    <button type="button" onclick="queueProcessor.clearFilter('merchant')" title="Clear merchant filter">x</button>
+                </span>
+            `);
+        }
+
+        // Amount filter badge
+        if (this.activeFilters.amountMin !== null || this.activeFilters.amountMax !== null) {
+            let amountText = 'Amount: ';
+            if (this.activeFilters.amountMin !== null && this.activeFilters.amountMax !== null) {
+                amountText += `£${this.activeFilters.amountMin.toFixed(2)} to £${this.activeFilters.amountMax.toFixed(2)}`;
+            } else if (this.activeFilters.amountMin !== null) {
+                amountText += `min £${this.activeFilters.amountMin.toFixed(2)}`;
+            } else {
+                amountText += `max £${this.activeFilters.amountMax.toFixed(2)}`;
+            }
+            badges.push(`
+                <span class="filter-badge">
+                    ${escapeHtml(amountText)}
+                    <button type="button" onclick="queueProcessor.clearFilter('amount')" title="Clear amount filter">x</button>
+                </span>
+            `);
+        }
+
+        return `
+            <div class="active-filters-bar">
+                <span class="filters-label">Active Filters:</span>
+                ${badges.join('')}
+                <button type="button" class="btn btn-secondary btn-small" onclick="queueProcessor.clearAllFilters()">Clear All</button>
+            </div>
+        `;
+    }
+
     // ==================== SELECTION HANDLING ====================
 
     toggleSelection(itemId, forceAdd = false) {
@@ -1450,7 +2194,13 @@ class QueueProcessor {
 
     renderListView() {
         this.viewMode = 'list';
-        document.getElementById('queueStatus').textContent = `${this.queueItems.length} items to process`;
+
+        // Update queue status with filter info
+        let statusText = `${this.queueItems.length} items to process`;
+        if (this.hasActiveFilters() && this.queueItems.length !== this.originalQueueItems.length) {
+            statusText = `Showing ${this.queueItems.length} of ${this.originalQueueItems.length} items`;
+        }
+        document.getElementById('queueStatus').textContent = statusText;
 
         const listHtml = this.queueItems.map((item, index) => {
             const hasDuplicate = this.duplicates[item.id];
@@ -1520,6 +2270,17 @@ class QueueProcessor {
             `;
         }).join('');
 
+        // Filter mode bar
+        const filterModeBar = this.filterMode ? `
+            <div class="filter-mode-bar">
+                <span class="mode-label">FILTER MODE</span>
+                <span class="shortcut"><kbd>D</kbd> Date</span>
+                <span class="shortcut"><kbd>M</kbd> Merchant</span>
+                <span class="shortcut"><kbd>A</kbd> Amount</span>
+                <span class="shortcut"><kbd>Esc</kbd> Exit</span>
+            </div>
+        ` : '';
+
         // Update mode bar
         const updateModeBar = this.updateMode ? `
             <div class="update-mode-bar">
@@ -1533,8 +2294,21 @@ class QueueProcessor {
             </div>
         ` : '';
 
+        // Active filters bar (shown even when not in filter mode)
+        const activeFiltersBar = this.getActiveFiltersHtml();
+
+        // Empty state for filtered results
+        const emptyFilteredHtml = this.queueItems.length === 0 && this.hasActiveFilters() ? `
+            <div class="empty-filtered-message">
+                <p>No items match the current filters.</p>
+                <button class="btn btn-secondary btn-small" onclick="queueProcessor.clearAllFilters()">Clear All Filters</button>
+            </div>
+        ` : '';
+
         document.getElementById('queueContent').innerHTML = `
+            ${filterModeBar}
             ${updateModeBar}
+            ${activeFiltersBar}
             <div class="queue-list-header">
                 <div class="queue-header-checkbox">
                     <input type="checkbox" id="selectAllCheckbox" title="Select all" onchange="queueProcessor.toggleSelectAll(this.checked)">
@@ -1549,6 +2323,7 @@ class QueueProcessor {
             </div>
             <div class="queue-list" id="queueList" tabindex="0">
                 ${listHtml}
+                ${emptyFilteredHtml}
             </div>
             <div class="queue-list-footer">
                 <div class="bulk-actions" id="bulkActions" style="display: none;">
@@ -1572,6 +2347,7 @@ class QueueProcessor {
                 <div class="keyboard-hints">
                     <span class="keyboard-hint">↑↓ Navigate</span>
                     <span class="keyboard-hint">Space Select</span>
+                    <span class="keyboard-hint">F Filter Mode</span>
                     <span class="keyboard-hint">U Update Mode</span>
                     <span class="keyboard-hint">S Save</span>
                     <span class="keyboard-hint">X Discard</span>

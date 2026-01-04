@@ -814,6 +814,7 @@ body {
 .queue-list-item {
     display: grid;
     grid-template-columns: 40px 100px 1fr 120px 100px;
+    align-items: center;
     gap: 1rem;
     padding: 0.75rem 1rem;
     border-bottom: 1px solid #e9ecef;
@@ -2028,12 +2029,9 @@ input:checked+.slider:before {
     -ms-user-select: none;
 }
 
-/* Missing Alias - Yellow background for merchants without aliases */
+/* Missing Alias - Orange text color for merchants without aliases */
 .missing-alias {
-    background-color: #fff3cd;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    border: 1px solid #ffc107;
+    color: #e65100;
 }
 
 /* Suggested Value - Italic styling for auto-suggested values */
@@ -2269,13 +2267,245 @@ input:checked+.slider:before {
         display: none;
     }
 
-    .update-mode-bar {
+    .update-mode-bar,
+    .filter-mode-bar {
         flex-direction: column;
         gap: 0.5rem;
         text-align: center;
     }
 
-    .update-mode-bar .shortcut {
+    .update-mode-bar .shortcut,
+    .filter-mode-bar .shortcut {
         justify-content: center;
+    }
+}
+
+/* ==================== FILTER MODE ==================== */
+
+/* Filter Mode Bar */
+.filter-mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0.75rem 1rem;
+    background-color: #28a745;
+    color: white;
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+}
+
+.filter-mode-bar .mode-label {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.filter-mode-bar .shortcut {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.filter-mode-bar kbd {
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-family: monospace;
+}
+
+/* Active Filters Bar */
+.active-filters-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    background-color: #e7f3ff;
+    border-bottom: 1px solid #b8daff;
+    flex-wrap: wrap;
+}
+
+.filters-label {
+    font-weight: 500;
+    color: #495057;
+    font-size: 0.9rem;
+}
+
+.filter-badge {
+    background-color: #007bff;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.filter-badge button {
+    background: rgba(255, 255, 255, 0.3);
+    border: none;
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background-color 0.15s;
+}
+
+.filter-badge button:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* Date Input Component */
+.date-input-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    border: 2px solid #ced4da;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    background: white;
+    font-family: monospace;
+    font-size: 1.1rem;
+    cursor: text;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.date-input-container:hover {
+    border-color: #adb5bd;
+}
+
+.date-input-container.focused {
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+}
+
+.date-segment {
+    display: inline-block;
+    min-width: 2ch;
+    text-align: center;
+    color: #212529;
+}
+
+.date-separator {
+    color: #6c757d;
+    user-select: none;
+}
+
+/* Amount Input Wrapper */
+.amount-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    border: 2px solid #ced4da;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    background: white;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.amount-input-wrapper:hover {
+    border-color: #adb5bd;
+}
+
+.amount-input-wrapper.focused {
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+}
+
+.currency-symbol {
+    color: #6c757d;
+    font-weight: 500;
+    user-select: none;
+}
+
+.amount-input {
+    border: none;
+    outline: none;
+    width: 100%;
+    font-size: 1rem;
+    background: transparent;
+}
+
+.amount-input::placeholder {
+    color: #adb5bd;
+}
+
+/* Form Hint */
+.form-hint {
+    color: #6c757d;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
+/* Filter Active Indicator in Merchant List */
+.filter-active-indicator {
+    background-color: #28a745;
+    color: white;
+    padding: 0.1rem 0.4rem;
+    border-radius: 8px;
+    font-size: 0.7rem;
+    margin-left: 0.5rem;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+.selectable-item.current-filter {
+    background-color: #d4edda;
+}
+
+.selectable-item.current-filter.focused {
+    background-color: #28a745;
+    color: white;
+}
+
+.selectable-item.current-filter.focused .filter-active-indicator {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Clear Filter Option */
+.selectable-item-clear {
+    color: #dc3545;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.selectable-item-clear:hover {
+    background-color: #f8d7da;
+}
+
+.selectable-item-clear.focused {
+    background-color: #dc3545;
+    color: white;
+}
+
+/* Empty Filtered Message */
+.empty-filtered-message {
+    text-align: center;
+    padding: 2rem;
+    color: #6c757d;
+}
+
+.empty-filtered-message p {
+    margin-bottom: 1rem;
+}
+
+/* Responsive Filter Mode */
+@media (max-width: 768px) {
+    .active-filters-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .filter-badge {
+        font-size: 0.8rem;
     }
 }
