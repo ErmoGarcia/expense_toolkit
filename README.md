@@ -73,7 +73,7 @@ A comprehensive personal expense management solution built with Python FastAPI a
 
 4. **Set up demo data**
    ```bash
-   python setup_demo.py
+   python scripts/setup_demo.py
    ```
 
 5. **Run the server**
@@ -114,6 +114,11 @@ Sample expenses include transactions from Tesco, Amazon, Spotify, TFL, McDonald'
 
 ```
 expense_toolkit/
+├── alembic/               # Database migrations
+│   ├── versions/         # Migration files
+│   ├── env.py           # Alembic environment config
+│   └── script.py.mako   # Migration template
+│
 ├── app/
 │   ├── models/              # SQLAlchemy database models
 │   │   ├── category.py      # Expense categories
@@ -121,7 +126,9 @@ expense_toolkit/
 │   │   ├── merchant.py      # Merchant aliases
 │   │   ├── tag.py          # Tags and expense-tag relationships
 │   │   ├── bank_account.py  # Bank account information
-│   │   └── import_history.py # Track import history
+│   │   ├── import_history.py # Track import history
+│   │   ├── notification.py  # Raw notifications
+│   │   └── rule.py         # Automation rules
 │   │
 │   ├── routers/            # FastAPI route handlers
 │   │   ├── expenses.py     # Expense CRUD operations
@@ -129,30 +136,46 @@ expense_toolkit/
 │   │   ├── categories.py   # Category management
 │   │   ├── tags.py         # Tag management
 │   │   ├── merchants.py    # Merchant alias management
-│   │   └── import_xlsx.py  # XLSX import endpoints
+│   │   ├── import_xlsx.py  # XLSX import endpoints
+│   │   ├── notifications.py # Notification processing
+│   │   └── rules.py        # Rule management
 │   │
-│   ├── services/           # Business logic (planned)
-│   │   ├── xlsx_parser.py  # XLSX import processing
-│   │   ├── gocardless.py   # Open Banking integration
-│   │   └── merchant_matcher.py # Fuzzy matching logic
+│   ├── services/           # Business logic
+│   │   ├── bank_parsers.py    # Bank file parsers
+│   │   ├── import_service.py  # XLSX import processing
+│   │   └── notification_parser.py # Parse bank notifications
 │   │
 │   ├── static/             # Frontend assets
 │   │   ├── index.html      # Main expenses view
 │   │   ├── queue.html      # Processing queue interface
+│   │   ├── categories.html # Category management
+│   │   ├── import.html     # Import interface
 │   │   ├── css/styles.css  # Application styles
 │   │   └── js/             # JavaScript files
 │   │       ├── expenses.js # Expenses page logic
-│   │       └── queue.js    # Queue processing logic
+│   │       ├── queue.js    # Queue processing logic
+│   │       ├── categories.js # Category management
+│   │       ├── import.js   # Import page logic
+│   │       ├── navigation.js # Navigation handling
+│   │       └── utils.js    # Shared utilities
 │   │
 │   ├── config.py          # Application configuration
-│   ├── database.py        # Database connection & setup
-│   └── main.py           # FastAPI application entry point
+│   ├── database.py        # Database connection & migrations
+│   ├── main.py           # FastAPI application entry point
+│   └── schemas.py        # Pydantic schemas
+│
+├── scripts/              # Utility scripts
+│   ├── setup_demo.py    # Demo data creation
+│   ├── add_test_data.py # Additional test data
+│   ├── add_more_duplicates.py # Duplicate test scenarios
+│   ├── parse_bank_cli.py # Bank parser CLI tool
+│   └── migrate_existing_db.py # Database migration helper
 │
 ├── data/                  # SQLite database location
 ├── imports/              # XLSX import folder
-├── venv/                # Virtual environment
+├── .venv/               # Virtual environment
+├── alembic.ini          # Alembic configuration
 ├── requirements.txt     # Python dependencies
-├── setup_demo.py       # Demo data creation script
 ├── run.py              # Server runner script
 └── README.md          # This file
 ```
@@ -280,10 +303,63 @@ For issues or questions:
 ### Database Management
 ```bash
 # Create demo data
-python setup_demo.py
+python scripts/setup_demo.py
 
 # The SQLite database is stored in data/expenses.db
 # You can inspect it with any SQLite browser
+
+# Database migrations are handled by Alembic and run automatically on startup
+# If you have an existing database from before Alembic was configured, run:
+python scripts/migrate_existing_db.py
+```
+
+### Database Migrations
+
+This project uses **Alembic** for database schema migrations. Migrations run automatically when the application starts.
+
+**For new installations:**
+- No action needed! The database will be created and migrated automatically on first run.
+
+**For existing databases (pre-Alembic):**
+- Run `python scripts/migrate_existing_db.py` once to mark your database as up-to-date.
+
+**Manual migration commands** (rarely needed):
+```bash
+# Check current migration version
+.venv/bin/python -m alembic current
+
+# View migration history
+.venv/bin/python -m alembic history
+
+# Upgrade to latest
+.venv/bin/python -m alembic upgrade head
+
+# Create new migration (for developers)
+.venv/bin/python -m alembic revision -m "description of changes"
+```
+
+### Utility Scripts
+
+The `scripts/` directory contains helpful utilities for development and testing:
+
+- **setup_demo.py** - Create a complete demo dataset with sample data
+- **add_test_data.py** - Add additional test expenses
+- **add_more_duplicates.py** - Add duplicate expense scenarios for testing
+- **parse_bank_cli.py** - CLI tool for testing bank file parsers
+- **migrate_existing_db.py** - One-time migration helper for existing databases
+
+See [scripts/README.md](scripts/README.md) for detailed documentation on each script.
+
+**Usage:**
+```bash
+# Setup demo data
+python scripts/setup_demo.py
+
+# Test bank file parser
+python scripts/parse_bank_cli.py examples/bankinter.xlsx
+
+# Add test duplicates
+python scripts/add_more_duplicates.py
 ```
 
 ### Adding New Features

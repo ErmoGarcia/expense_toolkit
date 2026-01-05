@@ -2855,20 +2855,20 @@ class QueueProcessor {
 
     openDuplicatesPage() {
         if (!this.hasDuplicates()) return;
-        
+
         // Build duplicate sets array and sort by oldest date first
         this.duplicateSets = Object.values(this.duplicates).sort((a, b) => {
             const dateA = new Date(a.raw_expense.transaction_date);
             const dateB = new Date(b.raw_expense.transaction_date);
             return dateA - dateB;
         });
-        
+
         this.duplicatesViewMode = true;
         this.currentDuplicateSetIndex = 0;
         this.focusedDuplicateItemIndex = 0;
-        
+
         this.renderDuplicatesView();
-        
+
         // Set up keyboard handler for duplicates page
         this.duplicatesPageKeyHandler = (e) => this.handleDuplicatesPageKeyboard(e);
         document.addEventListener('keydown', this.duplicatesPageKeyHandler);
@@ -2879,12 +2879,12 @@ class QueueProcessor {
         this.duplicateSets = [];
         this.currentDuplicateSetIndex = 0;
         this.focusedDuplicateItemIndex = 0;
-        
+
         if (this.duplicatesPageKeyHandler) {
             document.removeEventListener('keydown', this.duplicatesPageKeyHandler);
             this.duplicatesPageKeyHandler = null;
         }
-        
+
         // Reload queue data to refresh duplicate detection
         this.loadAllItems().then(() => {
             this.detectDuplicates().then(() => {
@@ -2901,13 +2901,13 @@ class QueueProcessor {
             this.closeDuplicatesPage(true);
             return;
         }
-        
+
         const currentSet = this.duplicateSets[this.currentDuplicateSetIndex];
         const allItems = [
             { ...currentSet.raw_expense, type: 'raw', isMain: true },
             ...currentSet.duplicates
         ];
-        
+
         const html = `
             <div class="duplicates-page">
                 <div class="duplicates-page-header">
@@ -2943,7 +2943,7 @@ class QueueProcessor {
                 </div>
             </div>
         `;
-        
+
         document.getElementById('queueContent').innerHTML = html;
     }
 
@@ -2951,11 +2951,11 @@ class QueueProcessor {
         const isFocused = index === this.focusedDuplicateItemIndex;
         const isSaved = item.type === 'saved';
         const isRaw = item.type === 'raw';
-        
+
         let cardClass = 'duplicate-transaction-card';
         if (isFocused) cardClass += ' focused';
         if (isSaved) cardClass += ' saved-expense';
-        
+
         return `
             <div class="${cardClass}" data-index="${index}" onclick="queueProcessor.focusDuplicateTransaction(${index})">
                 <div class="duplicate-transaction-header">
@@ -3019,25 +3019,25 @@ class QueueProcessor {
 
     handleDuplicatesPageKeyboard(e) {
         if (!this.duplicatesViewMode) return;
-        
+
         // Escape - return to queue
         if (e.key === 'Escape') {
             e.preventDefault();
             this.closeDuplicatesPage(false);
             return;
         }
-        
+
         // Ignore if typing in input
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
             return;
         }
-        
+
         const currentSet = this.duplicateSets[this.currentDuplicateSetIndex];
         const allItems = [
             { ...currentSet.raw_expense, type: 'raw' },
             ...currentSet.duplicates
         ];
-        
+
         // Up/Down - navigate within current set
         if (e.key === 'ArrowDown') {
             e.preventDefault();
@@ -3052,7 +3052,7 @@ class QueueProcessor {
                 this.renderDuplicatesView();
             }
         }
-        
+
         // Left/Right - navigate between sets
         else if (e.key === 'ArrowLeft') {
             e.preventDefault();
@@ -3069,7 +3069,7 @@ class QueueProcessor {
                 this.renderDuplicatesView();
             }
         }
-        
+
         // X - discard focused item
         else if (e.key === 'x' || e.key === 'X') {
             e.preventDefault();
@@ -3078,7 +3078,7 @@ class QueueProcessor {
                 this.discardFromDuplicatesPage(focusedItem.id);
             }
         }
-        
+
         // S - save focused item
         else if (e.key === 's' || e.key === 'S') {
             e.preventDefault();
@@ -3091,27 +3091,27 @@ class QueueProcessor {
 
     async discardFromDuplicatesPage(rawExpenseId) {
         if (!confirm('Are you sure you want to discard this transaction?')) return;
-        
+
         try {
             const response = await fetch(`/api/queue/${rawExpenseId}`, {
                 method: 'DELETE'
             });
-            
+
             if (!response.ok) {
                 throw new Error('Failed to discard item');
             }
-            
+
             // Remove from queue items
             this.queueItems = this.queueItems.filter(item => item.id !== rawExpenseId);
-            
+
             // Update duplicate sets - remove this item from current set
             const currentSet = this.duplicateSets[this.currentDuplicateSetIndex];
-            
+
             // Check if this is the main raw_expense or a duplicate
             if (currentSet.raw_expense.id === rawExpenseId) {
                 // Main item discarded - remove entire set
                 this.duplicateSets.splice(this.currentDuplicateSetIndex, 1);
-                
+
                 // Adjust current index if needed
                 if (this.currentDuplicateSetIndex >= this.duplicateSets.length && this.duplicateSets.length > 0) {
                     this.currentDuplicateSetIndex = this.duplicateSets.length - 1;
@@ -3121,7 +3121,7 @@ class QueueProcessor {
                 currentSet.duplicates = currentSet.duplicates.filter(
                     dup => !(dup.type === 'raw' && dup.id === rawExpenseId)
                 );
-                
+
                 // If only main item left (or only saved items), remove the set
                 const rawDuplicatesLeft = currentSet.duplicates.filter(d => d.type === 'raw').length;
                 if (rawDuplicatesLeft === 0) {
@@ -3131,13 +3131,13 @@ class QueueProcessor {
                     }
                 }
             }
-            
+
             this.focusedDuplicateItemIndex = 0;
             await this.updateQueueCount();
-            
+
             // Re-render or close if done
             this.renderDuplicatesView();
-            
+
         } catch (error) {
             console.error('Error discarding item:', error);
             alert('Error discarding item: ' + error.message);
@@ -3151,16 +3151,16 @@ class QueueProcessor {
             alert('Error: Item not found');
             return;
         }
-        
+
         // Check for required fields
         const hasMerchant = item.merchant_alias_id || item.suggested_merchant_alias;
         const hasCategory = item.category_id || item.suggested_category_id;
-        
+
         if (!hasMerchant || !hasCategory) {
             alert('This item is missing category or merchant. Please process it from the main queue first.');
             return;
         }
-        
+
         // Apply suggestions if needed
         if (!item.merchant_alias_id && item.suggested_merchant_alias) {
             await this.updateRawExpense(item.id, {
@@ -3173,34 +3173,34 @@ class QueueProcessor {
                 type: item.type || item.suggested_type || 'discretionary'
             });
         }
-        
+
         if (!confirm('Save this expense?')) return;
-        
+
         try {
             const response = await fetch('/api/queue/bulk-save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ raw_expense_ids: [rawExpenseId] })
             });
-            
+
             if (!response.ok) {
                 const error = await response.json();
                 throw new Error(error.detail || 'Save failed');
             }
-            
+
             const result = await response.json();
-            
+
             if (result.failed_count > 0) {
                 alert(`Save failed: ${result.errors.join(', ')}`);
                 return;
             }
-            
+
             // Remove from queue items
             this.queueItems = this.queueItems.filter(i => i.id !== rawExpenseId);
-            
+
             // Update duplicate sets
             const currentSet = this.duplicateSets[this.currentDuplicateSetIndex];
-            
+
             if (currentSet.raw_expense.id === rawExpenseId) {
                 this.duplicateSets.splice(this.currentDuplicateSetIndex, 1);
                 if (this.currentDuplicateSetIndex >= this.duplicateSets.length && this.duplicateSets.length > 0) {
@@ -3210,7 +3210,7 @@ class QueueProcessor {
                 currentSet.duplicates = currentSet.duplicates.filter(
                     dup => !(dup.type === 'raw' && dup.id === rawExpenseId)
                 );
-                
+
                 const rawDuplicatesLeft = currentSet.duplicates.filter(d => d.type === 'raw').length;
                 if (rawDuplicatesLeft === 0) {
                     this.duplicateSets.splice(this.currentDuplicateSetIndex, 1);
@@ -3219,12 +3219,12 @@ class QueueProcessor {
                     }
                 }
             }
-            
+
             this.focusedDuplicateItemIndex = 0;
             await this.updateQueueCount();
-            
+
             this.renderDuplicatesView();
-            
+
         } catch (error) {
             console.error('Error saving expense:', error);
             alert('Error saving expense: ' + error.message);
@@ -3509,7 +3509,7 @@ class QueueProcessor {
             <div style="text-align: center; padding: 3rem; color: #28a745;">
                 <h2>Queue is empty!</h2>
                 <p>No raw expenses to process at the moment.</p>
-                <a href="/" class="btn btn-primary">View Expenses</a>
+                <a href="/" class="btn btn-primary" style="margin-top: 2rem;">View Expenses</a>
             </div>
         `;
     }
