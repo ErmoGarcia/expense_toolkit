@@ -291,8 +291,8 @@ class OpenBankParser(BankParser):
             return False
     
     def parse(self, filepath: Path) -> List[Dict[str, Any]]:
-        # Read as HTML table
-        tables = pd.read_html(filepath, encoding='iso-8859-1')
+        # Read as HTML table with European number format (dot as thousands, comma as decimal)
+        tables = pd.read_html(filepath, encoding='iso-8859-1', thousands='.', decimal=',')
         
         if not tables:
             raise ValueError("No tables found in OpenBank file")
@@ -350,23 +350,16 @@ class OpenBankParser(BankParser):
                 continue
             
             try:
+                # pandas read_html with decimal=',' already converts to float
                 if isinstance(importe, (int, float)):
                     amount = Decimal(str(importe))
                 else:
+                    # Fallback for string values
                     importe_str = str(importe).strip()
-                    # Detect format: if has comma and dot, it's European (1.234,56)
-                    # If has only dot, it's standard (1234.56)
-                    # If has only comma, it's European without thousands (123,45)
-                    if ',' in importe_str and '.' in importe_str:
-                        # European format: 1.234,56 -> remove dots, replace comma
-                        amount_str = importe_str.replace('.', '').replace(',', '.')
-                    elif ',' in importe_str:
-                        # European format without thousands: 123,45 -> replace comma
-                        amount_str = importe_str.replace(',', '.')
-                    else:
-                        # Standard format: 1234.56 or integer
-                        amount_str = importe_str
-                    amount = Decimal(amount_str)
+                    # Handle European format: comma as decimal separator
+                    if ',' in importe_str:
+                        importe_str = importe_str.replace('.', '').replace(',', '.')
+                    amount = Decimal(importe_str)
             except Exception:
                 continue
             
