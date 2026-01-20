@@ -1,0 +1,45 @@
+[Unit]
+Description=Expense Toolkit - Personal Expense Management System
+Documentation=https://github.com/yourusername/expense_toolkit
+After=network.target
+
+[Service]
+Type=exec
+User=expenses
+Group=expenses
+WorkingDirectory=/home/expenses/expense_toolkit
+
+# Environment variables
+Environment="PATH=/home/expenses/expense_toolkit/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="ENVIRONMENT=production"
+Environment="HOST=0.0.0.0"
+Environment="PORT=8000"
+Environment="LOG_LEVEL=INFO"
+
+# Start the application
+ExecStart=/home/expenses/expense_toolkit/.venv/bin/python /home/expenses/expense_toolkit/run_production.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=400
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/expenses/expense_toolkit/data /home/expenses/expense_toolkit/imports
+
+# Resource limits (adjust as needed for your LXC)
+# MemoryLimit=512M
+# CPUQuota=100%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=expense-toolkit
+
+[Install]
+WantedBy=multi-user.target

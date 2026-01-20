@@ -1,0 +1,18 @@
+[Unit]
+Description=Backup Expense Toolkit Database
+Documentation=https://github.com/yourusername/expense_toolkit
+After=network.target
+
+[Service]
+Type=oneshot
+User=expenses
+Group=expenses
+WorkingDirectory=/home/expenses/expense_toolkit
+
+# Execute the backup script
+ExecStart=/home/expenses/expense_toolkit/scripts/backup_database.sh
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=expense-toolkit-backup

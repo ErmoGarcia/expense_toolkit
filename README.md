@@ -77,19 +77,45 @@ A comprehensive personal expense management solution built with Python FastAPI a
    ```
 
 5. **Run the server**
+   
+   **Development mode** (with auto-reload):
    ```bash
    python run.py
    ```
    
+   **Production mode** (with Gunicorn + multiple workers):
+   ```bash
+   python run_production.py
+   ```
+   
    Or manually:
    ```bash
+   # Development
    ./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   
+   # Production
+   ./venv/bin/gunicorn -c gunicorn_conf.py app.main:app
    ```
 
 6. **Open your browser**
    - Main application: http://localhost:8000
    - Processing queue: http://localhost:8000/queue
+   - Categories: http://localhost:8000/categories
+   - Import: http://localhost:8000/import
    - API documentation: http://localhost:8000/docs
+   - Health check: http://localhost:8000/health
+
+## 🏭 Production Deployment
+
+For production deployment on a server or LXC container, see **[DEPLOYMENT.md](DEPLOYMENT.md)** for detailed instructions including:
+
+- Complete LXC/server setup guide
+- Systemd service configuration
+- Automated daily database backups
+- Production logging with journald
+- Security hardening
+- Monitoring and maintenance
+- Troubleshooting guide
 
 ## 📊 Demo Data
 
@@ -290,15 +316,36 @@ For issues or questions:
 ## 🧑‍💻 Development
 
 ### Running in Development Mode
-```bash
-# With auto-reload
-./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Access the application
-# Main app: http://localhost:8000
-# Queue: http://localhost:8000/queue
-# API docs: http://localhost:8000/docs
+Development mode includes auto-reload when code changes:
+
+```bash
+# Using the run script (recommended)
+python run.py
+
+# Or manually with uvicorn
+./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+### Running in Production Mode
+
+Production mode uses Gunicorn with multiple Uvicorn workers:
+
+```bash
+# Using the production run script (recommended)
+python run_production.py
+
+# Or manually with gunicorn
+./venv/bin/gunicorn -c gunicorn_conf.py app.main:app
+```
+
+**Access the application:**
+- Main app: http://localhost:8000
+- Queue: http://localhost:8000/queue
+- API docs: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
+
+For production deployment with systemd, automated backups, and monitoring, see **[DEPLOYMENT.md](DEPLOYMENT.md)**
 
 ### Database Management
 ```bash
